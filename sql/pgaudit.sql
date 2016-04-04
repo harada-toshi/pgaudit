@@ -3,19 +3,6 @@
 -- Create pgaudit extension
 CREATE EXTENSION IF NOT EXISTS pgaudit;
 
--- Make sure events don't get logged twice when session logging
-SET pgaudit.log = 'all';
-SET pgaudit.log_level = 'notice';
-
-CREATE TABLE tmp (id int, data text);
-CREATE TABLE tmp2 AS (SELECT * FROM tmp);
-
-RESET pgaudit.log;
-RESET pgaudit.log_level;
-
-DROP TABLE tmp;
-DROP TABLE tmp2;
-
 --
 -- Audit log fields are:
 --     AUDIT_TYPE - SESSION or OBJECT
@@ -35,6 +22,7 @@ SELECT current_user \gset
 -- Set pgaudit parameters for the current (super)user.
 ALTER ROLE :current_user SET pgaudit.log = 'Role';
 ALTER ROLE :current_user SET pgaudit.log_level = 'notice';
+ALTER ROLE :current_user SET pgaudit.log_client = ON;
 
 -- After each connect, we need to load pgaudit, as if it was
 -- being loaded from shared_preload_libraries.  Otherwise, the hooks
@@ -51,6 +39,7 @@ CREATE ROLE auditor;
 CREATE USER user1;
 ALTER ROLE user1 SET pgaudit.log = 'ddl, ROLE';
 ALTER ROLE user1 SET pgaudit.log_level = 'notice';
+ALTER ROLE user1 SET pgaudit.log_client = ON;
 
 --
 -- Create, select, drop (select will not be audited)
@@ -74,6 +63,7 @@ CREATE USER user2;
 ALTER ROLE user2 SET pgaudit.log = 'Read, writE';
 ALTER ROLE user2 SET pgaudit.log_catalog = OFF;
 ALTER ROLE user2 SET pgaudit.log_level = 'warning';
+ALTER ROLE user2 SET pgaudit.log_client = ON;
 ALTER ROLE user2 SET pgaudit.role = auditor;
 ALTER ROLE user2 SET pgaudit.log_statement_once = ON;
 
@@ -426,6 +416,7 @@ UPDATE account
 \connect - :current_user
 SET pgaudit.log = 'ALL';
 SET pgaudit.log_level = 'notice';
+SET pgaudit.log_client = ON;
 SET pgaudit.log_relation = ON;
 SET pgaudit.log_parameter = ON;
 
@@ -715,6 +706,7 @@ REVOKE user1 FROM user2;
 -- Test that FK references do not log but triggers still do
 SET pgaudit.log = 'READ,WRITE';
 SET pgaudit.role TO 'auditor';
+SET pgaudit.log_parameter TO OFF;
 
 CREATE TABLE aaa
 (
@@ -751,15 +743,6 @@ INSERT INTO bbb VALUES (1);
 
 DROP TABLE bbb;
 DROP TABLE aaa;
-
--- Test create table as after extension as been dropped
-DROP EXTENSION pgaudit;
-
-CREATE TABLE tmp (id int, data text);
-CREATE TABLE tmp2 AS (SELECT * FROM tmp);
-
-DROP TABLE tmp;
-DROP TABLE tmp2;
 
 -- Cleanup
 -- Set client_min_messages up to warning to avoid noise
