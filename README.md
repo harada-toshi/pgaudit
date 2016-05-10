@@ -1,6 +1,6 @@
 # PostgreSQL Audit Extension
 
-The PostgreSQL Audit extension (`pgaudit`) provides detailed session and/or object audit logging via the standard PostgreSQL logging facility.
+The PostgreSQL Audit extension (`pgaudit`) provides detailed session and/or object audit logging via the standard PostgreSQL logging facility.  
 
 The goal of the PostgreSQL Audit extension (`pgaudit`) is to provide PostgreSQL users with capability to produce audit logs often required to comply with government, financial, or ISO certifications.
 
