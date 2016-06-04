@@ -2,6 +2,8 @@
 <!DOCTYPE doc SYSTEM "doc.dtd">
 
 <doc subtitle="{[project-subtitle]}" toc="n">
+    <description>The PostgreSQL Audit Extension ({[project]}) provides detailed session and/or object audit logging via the standard PostgreSQL logging facility.</description>
+
     <section id="introduction">
         <title>Introduction</title>
 
@@ -405,7 +407,7 @@ AUDIT: SESSION,36,1,DDL,ALTER TABLE,TABLE,public.test2,ALTER TABLE test RENAME T
         <p>The PostgreSQL Audit Extension is based on the pgaudit project at https://github.com/2ndQuadrant authored by Abhijit Menon-Sen and Ian Barwick.  Further development has been done by David Steele.</p>
     </section> -->
 
-    <section id="log-analyzer">
+    <section id="log-analyzer" keyword="log-analyzer">
         <title>PostgreSQL Audit Log Analyzer</title>
 
         <p>The PostgreSQL Audit extension ({[project]}) provides detailed session and/or object audit logging via the standard PostgreSQL logging facility.  However, logs are not the ideal place to store audit information.  The PostgreSQL Audit Log Analyzer ({[project-analyze]}) reads audit entries from the PostgreSQL logs and loads them into a database schema to aid in analysis and auditing.</p>
@@ -1000,7 +1002,7 @@ select session.session_id,
         </section>
     </section>
 
-    <section id="set-user">
+    <section id="set-user" keyword="set-user">
         <title>PostgreSQL set_user Extension Module</title>
 
         <section id="set-user-syntax">
