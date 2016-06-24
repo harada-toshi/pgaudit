@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE doc SYSTEM "manifest.dtd">
+<doc>
+    <!-- System-wide variables  -->
+    <variable-list>
+        <variable key="project">pgAudit</variable>
+        <variable key="project-subtitle">Open Source PostgreSQL Audit Logging</variable>
+        <variable key="version">1.0.1</variable>
+
+        <variable key="project-analyze">{[project]} Analyze</variable>
+        <variable key="project-setuser">{[project]} Set User</variable>
+
+        <variable key="postgres">PostgreSQL</variable>
+        <variable key="dash">-</variable>
+
+        <!-- Logo location -->
+        <variable key="logo">/pgaudit/doc/output/latex/logo</variable>
+
+        <!-- PDF variables  -->
+        <variable key="pdf-title">PostgreSQL Audit Extension User Guide</variable>
+        <variable key="pdf-subtitle">{[project-subtitle]}</variable>
+    </variable-list>
+
+    <source-list>
+        <source key="user-guide"/>
+    </source-list>
+
+    <render-list>
+        <render type="pdf" file="{[project]}-UserGuide-{[version]}">
+            <render-source key="user-guide"/>
+        </render>
+    </render-list>
+</doc>

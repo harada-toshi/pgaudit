@@ -1,0 +1,1444 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE doc SYSTEM "doc.dtd">
+
+<doc subtitle="{[project-subtitle]}" toc="n">
+    <section id="introduction">
+        <title>Introduction</title>
+
+        <p>The PostgreSQL Audit Extension ({[project]}) provides detailed session and/or object audit logging via the standard PostgreSQL logging facility.</p>
+
+        <p>The goal of the {[project]} is to provide PostgreSQL users with capability to produce audit logs often required to comply with government, financial, or ISO certifications.</p>
+
+        <p>An audit is an official inspection of an individual's or organization's accounts, typically by an independent body.  The information gathered by {[project]} is properly called an audit trail or audit log.  The term audit log is used in this documentation.</p>
+    </section>
+
+    <section id="why">
+        <title>Why {[project]}?</title>
+
+        <p>Basic statement logging can be provided by the standard logging facility with <pg-setting>log_statement = all</pg-setting>.  This is acceptable for monitoring and other usages but does not provide the level of detail generally required for an audit.  It is not enough to have a list of all the operations performed against the database. It must also be possible to find particular statements that are of interest to an auditor.  The standard logging facility shows what the user requested, while {[project]} focuses on the details of what happened while the database was satisfying the request.</p>
+
+        <p>For example, an auditor may want to verify that a particular table was created inside a documented maintenance window.  This might seem like a simple job for grep, but what if you are presented with something like this (intentionally obfuscated) example:</p>
+
+        <code-block title="">
+BEGIN
+    EXECUTE 'CREATE TABLE import' || 'ant_table (id INT)';
+END $$;
+        </code-block>
+
+        <p>Standard logging will give you this:</p>
+
+        <code-block title="">
+LOG:  statement: DO $$
+BEGIN
+    EXECUTE 'CREATE TABLE import' || 'ant_table (id INT)';
+END $$;
+        </code-block>
+
+        <p>It appears that finding the table of interest may require some knowledge of the code in cases where tables are created dynamically.  This is not ideal since it would be preferable to just search on the table name. This is where {[project]} comes in.  For the same input, it will produce this output in the log:</p>
+
+        <code-block title="">
+AUDIT: SESSION,33,1,FUNCTION,DO,,,"DO $$
+BEGIN
+    EXECUTE 'CREATE TABLE import' || 'ant_table (id INT)';
+END $$;"
+AUDIT: SESSION,33,2,DDL,CREATE TABLE,TABLE,public.important_table,CREATE TABLE important_table (id INT)
+        </code-block>
+
+        <p>Not only is the <code>DO</code> block logged, but substatement 2 contains the full text of the <code>CREATE TABLE</code> with the statement type, object type, and full-qualified name to make searches easy.</p>
+
+        <p>When logging <code>SELECT</code> and <code>DML</code> statements, {[project]} can be configured to log a separate entry for each relation referenced in a statement.  No parsing is required to find all statements that touch a particular table.  In fact, the goal is that the statement text is provided primarily for deep forensics and should not be required for an audit.</p>
+    </section>
+
+    <section id="usage-considerations">
+        <title>Usage Considerations</title>
+
+        <p>Depending on settings, it is possible for {[project]} to generate an enormous volume of logging.  Be careful to determine exactly what needs to be audit logged in your environment to avoid logging too much.</p>
+
+        <p>For example, when working in an OLAP environment it would probably not be wise to audit log inserts into a large fact table.  The size of the log file will likely be many times the actual data size of the inserts because the log file is expressed as text.  Since logs are generally stored with the OS this may lead to disk space being exhausted very quickly.  In cases where it is not possible to limit audit logging to certain tables, be sure to assess the performance impact while testing and allocate plenty of space on the log volume.  This may also be true for OLTP environments.  Even if the insert volume is not as high, the performance impact of audit logging may still noticeably affect latency.</p>
+
+        <p>To limit the number of relations audit logged for <code>SELECT</code> and <code>DML</code> statements, consider using object audit logging (see <link section="/object-audit-logging">Object Auditing</link>).  Object audit logging allows selection of the relations to be logged allowing for reduction of the overall log volume.  However, when new relations are added they must be explicitly added to object audit logging.  A programmatic solution where specified tables are excluded from logging and all others are included may be a good option in this case.</p>
+    </section>
+
+    <!-- <section id="compile-install">
+        <title>Compile and Install</title>
+
+        <p>Clone the PostgreSQL repository:</p>
+
+        <code-block title="">
+git clone https://github.com/postgres/postgres.git
+        </code-block>
+
+        <p>Checkout <id>REL9_5_STABLE</id> branch:</p>
+
+        <code-block title="">
+git checkout REL9_5_STABLE
+        </code-block>
+
+        <p>Make PostgreSQL:</p>
+
+        <code-block title="">
+./configure
+make install -s
+        </code-block>
+
+    <p>Change to the contrib directory:</p>
+
+        <code-block title="">
+cd contrib
+        </code-block>
+
+    <p>Clone the {[project]} extension:</p>
+
+        <code-block title="">
+git clone https://github.com/pgaudit/pgaudit.git
+        </code-block>
+
+    <p>Change to {[project]} directory:</p>
+
+        <code-block title="">
+cd pgaudit
+        </code-block>
+
+    <p>Build {[project]} and run regression tests:</p>
+
+        <code-block title="">
+make -s check
+        </code-block>
+
+    <p>Install {[project]}:</p>
+
+        <code-block title="">
+make install
+        </code-block>
+    </section> -->
+
+    <section id="install">
+        <title>Installation</title>
+
+        <p>Please refer to section 4.8 of the Crunchy Certified <postgres/> Secure Installation and Configuration Guide.</p>
+    </section>
+
+    <section id="settings">
+        <title>Settings</title>
+
+        <p>Settings may be modified only by a superuser. Allowing normal users to change their settings would defeat the point of an audit log.</p>
+
+        <p>Settings can be specified globally (in <file>postgresql.conf</file> or using <code>ALTER SYSTEM ... SET</code>), at the database level (using <code>ALTER DATABASE ... SET</code>), or at the role level (using <code>ALTER ROLE ... SET</code>).  Note that settings are not inherited through normal role inheritance and <code>SET ROLE</code> will not alter a user's {[project]} settings.  This is a limitation of the roles system and not inherent to {[project]}.</p>
+
+        <p>The {[project]} extension must be loaded in <link url="http://www.postgresql.org/docs/9.5/static/runtime-config-client.html#GUC-SHARED-PRELOAD-LIBRARIES">shared_preload_libraries</link>.  Otherwise, an error will be raised at load time and no audit logging will occur.</p>
+
+        <section id="option-log">
+            <title>pgaudit.log</title>
+
+            <p>Specifies which classes of statements will be logged by session audit logging.  Possible values are:</p>
+
+            <p>* <b>READ</b>: <code>SELECT</code> and <code>COPY</code> when the source is a relation or a query.
+
+            * <b>WRITE</b>: <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>TRUNCATE</code>, and <code>COPY</code> when the destination is a relation.
+
+            * <b>FUNCTION</b>: Function calls and <code>DO</code> blocks.
+
+            * <b>ROLE</b>: Statements related to roles and privileges: <code>GRANT</code>, <code>REVOKE</code>, <code>CREATE/ALTER/DROP ROLE</code>.
+
+            * <b>DDL</b>: All <code>DDL</code> that is not included in the <code>ROLE</code> class.
+
+            * <b>MISC</b>: Miscellaneous commands, e.g. <code>DISCARD</code>, <code>FETCH</code>, <code>CHECKPOINT</code>, <code>VACUUM</code>.</p>
+
+            <p>Multiple classes can be provided using a comma-separated list and classes can be subtracted by prefacing the class with a <code>-</code> sign (see <link section="/session-audit-logging">Session Audit Logging</link>).</p>
+
+            <p>The default is <pg-setting>none</pg-setting>.</p>
+        </section>
+
+        <section id="option-log-catalog">
+            <title>pgaudit.log_catalog</title>
+
+            <p>Specifies that session logging should be enabled in the case where all relations in a statement are in pg_catalog.  Disabling this setting will reduce noise in the log from tools like psql and PgAdmin that query the catalog heavily.</p>
+
+            <p>The default is <pg-setting>on</pg-setting>.</p>
+        </section>
+
+        <section id="option-log-level">
+            <title>pgaudit.log_level</title>
+
+            <p>Specifies the log level that will be used for log entries (see <link url="http://www.postgresql.org/docs/9.4/static/runtime-config-logging.html#RUNTIME-CONFIG-SEVERITY-LEVELS">Message Severity Levels</link> for valid levels) but note that <code>ERROR</code>, <code>FATAL</code>, and <code>PANIC</code> are not allowed). This setting is used for regression testing and may also be useful to end users for testing or other purposes.</p>
+
+            <p>The default is <pg-setting>log</pg-setting>.</p>
+        </section>
+
+        <section id="option-log-parameter">
+            <title>pgaudit.log_parameter</title>
+
+            <p>Specifies that audit logging should include the parameters that were passed with the statement.  When parameters are present they will be included in <id>CSV</id> format after the statement text.</p>
+
+            <p>The default is <pg-setting>off</pg-setting>.</p>
+        </section>
+
+        <section id="option-log-relation">
+            <title>pgaudit.log_relation</title>
+
+            <p>Specifies whether session audit logging should create a separate log entry for each relation (<code>TABLE</code>, <code>VIEW</code>, etc.) referenced in a <code>SELECT</code> or <code>DML</code> statement.  This is a useful shortcut for exhaustive logging without using object audit logging.</p>
+
+            <p>The default is <pg-setting>off</pg-setting>.</p>
+        </section>
+
+        <section id="option-log-statement-once">
+            <title>pgaudit.log_statement_once</title>
+
+            <p>Specifies whether logging will include the statement text and parameters with the first log entry for a statement/substatement combination or with every entry.  Disabling this setting will result in less verbose logging but may make it more difficult to determine the statement that generated a log entry, though the statement/substatement pair along with the process id should suffice to identify the statement text logged with a previous entry.</p>
+
+            <p>The default is <pg-setting>off</pg-setting>.</p>
+        </section>
+
+        <section id="option-role">
+            <title>pgaudit.role</title>
+
+            <p>Specifies the master role to use for object audit logging.  Multiple audit roles can be defined by granting them to the master role. This allows multiple groups to be in charge of different aspects of audit logging.</p>
+
+            <p>There is no default.</p>
+        </section>
+    </section>
+
+    <section id="session-audit-logging">
+        <title>Session Audit Logging</title>
+
+        <p>Session audit logging provides detailed logs of all statements executed by a user in the backend.</p>
+
+        <section id="configuration">
+            <title>Configuration</title>
+
+            <p>Session logging is enabled with the <link section="/settings/option-log">pgaudit.log</link> setting.</p>
+
+            <p>Enable session logging for all <code>DML</code> and <code>DDL</code> and log all relations in <code>DML</code> statements:</p>
+
+            <code-block title="">
+set pgaudit.log = 'write, ddl';
+set pgaudit.log_relation = on;
+            </code-block>
+
+            <p>Enable session logging for all commands except <code>MISC</code> and raise audit log messages as <code>NOTICE</code>:</p>
+
+            <code-block title="">
+set pgaudit.log = 'all, -misc';
+set pgaudit.log_level = notice;
+            </code-block>
+        </section>
+
+        <section id="example">
+            <title>Example</title>
+
+            <p>In this example session audit logging is used for logging <code>DDL</code> and <code>SELECT</code> statements.  Note that the insert statement is not logged since the <code>WRITE</code> class is not enabled</p>
+
+            <code-block title="SQL">
+set pgaudit.log = 'read, ddl';
+
+create table account
+(
+    id int,
+    name text,
+    password text,
+    description text
+);
+
+insert into account (id, name, password, description)
+             values (1, 'user1', 'HASH1', 'blah, blah');
+
+select *
+    from account;
+            </code-block>
+
+            <code-block title="Log Output">
+AUDIT: SESSION,1,1,DDL,CREATE TABLE,TABLE,public.account,create table account
+(
+    id int,
+    name text,
+    password text,
+    description text
+);
+AUDIT: SESSION,2,1,READ,SELECT,,,select *
+    from account
+            </code-block>
+        </section>
+    </section>
+
+    <section id="object-audit-logging">
+        <title>Object Audit Logging</title>
+
+        <p>Object audit logging logs statements that affect a particular relation. Only <code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code> and <code>DELETE</code> commands are supported.  <code>TRUNCATE</code> is not included in object audit logging.</p>
+
+        <p>Object audit logging is intended to be a finer-grained replacement for <pg-setting>pgaudit.log = 'read, write'</pg-setting>.  As such, it may not make sense to use them in conjunction but one possible scenario would be to use session logging to capture each statement and then supplement that with object logging to get more detail about specific relations.</p>
+
+        <section id="configuration">
+            <title>Configuration</title>
+
+            <p>Object-level audit logging is implemented via the roles system.  The <link section="/settings/option-role">pgaudit.role</link> setting defines the role that will be used for audit logging.  A relation (<code>TABLE</code>, <code>VIEW</code>, etc.) will be audit logged when the audit role has permissions for the command executed or inherits the permissions from another role.  This allows you to effectively have multiple audit roles even though there is a single master role in any context.</p>
+
+            <p>Set <link section="/settings/option-role">pgaudit.role</link> to <code>auditor</code> and grant <code>SELECT</code> and <code>DELETE</code> privileges on the <code>account</code> table. Any <code>SELECT</code> or <code>DELETE</code> statements on the <code>account</code> table will now be logged:</p>
+
+            <code-block title="">
+set pgaudit.role = 'auditor';
+
+grant select, delete
+   on public.account
+   to auditor;
+            </code-block>
+        </section>
+
+        <section id="example">
+            <title>Example</title>
+
+            <p>In this example object audit logging is used to illustrate how a granular approach may be taken towards logging of <code>SELECT</code> and <code>DML</code> statements.  Note that logging on the <code>account</code> table is controlled by column-level permissions, while logging on the <code>account_role_map</code> table is table-level.</p>
+
+            <code-block title="SQL">
+set pgaudit.role = 'auditor';
+
+create table account
+(
+    id int,
+    name text,
+    password text,
+    description text
+);
+
+grant select (password)
+   on public.account
+   to auditor;
+
+select id, name
+  from account;
+
+select password
+  from account;
+
+grant update (name, password)
+   on public.account
+   to auditor;
+
+update account
+   set description = 'yada, yada';
+
+update account
+   set password = 'HASH2';
+
+create table account_role_map
+(
+    account_id int,
+    role_id int
+);
+
+grant select
+   on public.account_role_map
+   to auditor;
+
+select account.password,
+       account_role_map.role_id
+  from account
+       inner join account_role_map
+            on account.id = account_role_map.account_id
+            </code-block>
+
+            <code-block title="Log Output">
+AUDIT: OBJECT,1,1,READ,SELECT,TABLE,public.account,select password
+  from account
+AUDIT: OBJECT,2,1,WRITE,UPDATE,TABLE,public.account,update account
+   set password = 'HASH2'
+AUDIT: OBJECT,3,1,READ,SELECT,TABLE,public.account,select account.password,
+       account_role_map.role_id
+  from account
+       inner join account_role_map
+            on account.id = account_role_map.account_id
+AUDIT: OBJECT,3,1,READ,SELECT,TABLE,public.account_role_map,select account.password,
+       account_role_map.role_id
+  from account
+       inner join account_role_map
+            on account.id = account_role_map.account_id
+            </code-block>
+        </section>
+    </section>
+
+    <section id="format">
+        <title>Format</title>
+
+        <p>Audit entries are written to the standard logging facility and contain the following columns in comma-separated format.  Output is compliant CSV format only if the log line prefix portion of each log entry is removed.</p>
+
+        <p>* <b>AUDIT_TYPE</b> - <code>SESSION</code> or <code>OBJECT</code>.
+
+        * <b>STATEMENT_ID</b> - Unique statement ID for this session. Each statement ID represents a backend call.  Statement IDs are sequential even if some statements are not logged.  There may be multiple entries for a statement ID when more than one relation is logged.
+
+        * <b>SUBSTATEMENT_ID</b> - Sequential ID for each sub-statement within the main statement.  For example, calling a function from a query.  Sub-statement IDs are continuous even if some sub-statements are not logged.  There may be multiple entries for a sub-statement ID when more than one relation is logged.
+
+        * <b>CLASS</b> - e.g. <code>READ</code>, <code>ROLE</code> (see <link section="/settings/option-log">pgaudit.log</link>).
+
+        * <b>COMMAND</b> - e.g. <code>ALTER TABLE</code>, <code>SELECT</code>.
+
+        * <b>OBJECT_TYPE</b> - <code>TABLE</code>, <code>INDEX</code>, <code>VIEW</code>, etc. Available for <code>SELECT</code>, <code>DML</code> and most <code>DDL</code> statements.
+
+        * <b>OBJECT_NAME</b> - The fully-qualified object name (e.g. public.account).  Available for <code>SELECT</code>, <code>DML</code> and most <code>DDL</code> statements.
+
+        * <b>STATEMENT</b> - Statement executed on the backend.
+
+        * <b>PARAMETER</b> - If <pg-setting>pgaudit.log_parameter</pg-setting> is set then this field will contain the statement parameters as quoted CSV.</p>
+
+        <p>Use <link url="http://www.postgresql.org/docs/9.5/static/runtime-config-logging.html#GUC-LOG-LINE-PREFIX">log_line_prefix</link> to add any other fields that are needed to satisfy your audit log requirements.  A typical log line prefix might be <id>'\%m \%u \%d: '</id> which would provide the date/time, user name, and database name for each audit log.</p>
+    </section>
+
+    <section id="caveats">
+        <title>Caveats</title>
+
+        <p>* Object renames are logged under the name they were renamed to. For example, renaming a table will produce the following result:</p>
+
+        <code-block title="">
+ALTER TABLE test RENAME TO test2;
+
+AUDIT: SESSION,36,1,DDL,ALTER TABLE,TABLE,public.test2,ALTER TABLE test RENAME TO test2
+        </code-block>
+
+        <p>* It is possible to have a command logged more than once.  For example, when a table is created with a primary key specified at creation time the index for the primary key will be logged independently and another audit log will be made for the index under the create entry.  The multiple entries will however be contained within one statement ID.
+
+        * Autovacuum and Autoanalyze are not logged.
+
+        * Statements that are executed after a transaction enters an aborted state will not be audit logged.  However, the statement that caused the error and any subsequent statements executed in the aborted transaction will be logged as ERRORs by the standard logging facility.</p>
+    </section>
+
+    <!-- <section id="authors">
+        <title>Authors</title>
+
+        <p>The PostgreSQL Audit Extension is based on the pgaudit project at https://github.com/2ndQuadrant authored by Abhijit Menon-Sen and Ian Barwick.  Further development has been done by David Steele.</p>
+    </section> -->
+
+    <section id="log-analyzer">
+        <title>PostgreSQL Audit Log Analyzer</title>
+
+        <p>The PostgreSQL Audit extension ({[project]}) provides detailed session and/or object audit logging via the standard PostgreSQL logging facility.  However, logs are not the ideal place to store audit information.  The PostgreSQL Audit Log Analyzer ({[project-analyze]}) reads audit entries from the PostgreSQL logs and loads them into a database schema to aid in analysis and auditing.</p>
+
+        <!-- <section id="installation">
+            <title>Installing</title>
+
+            <p>* Install {[project]} following the instructions included with the extension.
+
+            * Update the log settings in <file>postgresql.conf</file> as follows:</p>
+
+            <code-block title="">
+log_destination = 'csvlog'
+logging_collector = on
+log_connections = on
+            </code-block>
+
+            <p>The log files must end with `.csv` and follow a naming convention that ensures files will sort alphabetically with respect to creation time.  Log location is customizable when calling {[project-analyze]}.
+
+            * Install {[project-analyze]}:
+
+            Copy the bin and lib directories to any location you prefer but make sure there are in the same directory.
+
+            * Execute audit.sql in the database you want to audit as <user>postgres</user>:</p>
+
+            <code-block title="">
+psql -U postgres -f sql/audit.sql &lt;db name&gt;
+            </code-block>
+        </section>
+
+        <section id="running">
+            <title>Running</title>
+
+            <p>{[project-analyze]} is intended to be run as a daemon process.</p>
+
+            <code-block title="">
+./pgaudit_analyze {[dash]}-daemon /path/to/log/files
+            </code-block>
+
+        </section>
+
+        <section id="testing">
+            <title>Testing</title>
+
+            <p>Regression tests are located at test/test.pl.  You may need to set <code>{[dash]}-pgsql-bin</code> depending on your local configuration.
+
+A <file>Vagrantfile</file> has been included in the test directory which gives the exact steps needed to get the regression rests running on <id>CentOS 7</id>.  After logging on to the <id>vagrant</id> box simply run:</p>
+
+            <code-block title="">
+/pgaudit/analyze/test/test.pl
+            </code-block>
+        </section> -->
+
+        <section id="install">
+            <title>Installation</title>
+
+            <p>Please refer to section 4.9 of the Crunchy Certified <postgres/> Secure Installation and Configuration Guide.</p>
+        </section>
+
+        <section id="schema">
+            <title>{[project]} Schema</title>
+
+            <p>The <id>pgaudit_analyze</id> processes monitors the <postgres/> <id>CSV</id> log output and loads all log and audit events into the <id>pgaudit</id> schema.  Session and statement errors set the <id>state</id> column in the <id>session</id> and <id>audit_statement</id> tables respectively.</p>
+
+            <p>In addition, logon information for users on each audited database is collected and stored.</p>
+
+            <section id="tables">
+                <title>Tables</title>
+
+                <section id="session-table">
+                    <title>session table</title>
+
+                    <p>Contains information about <postgres/> sessions.</p>
+
+                    <p>{[project]} tracks whether connections succeed or fail and the result is stored in the <id>state</id> column.  Additional information about the error can be found by joining to the <id>log_event</id> table on the <id>session_id</id> column.</p>
+
+                    <table>
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>session_id</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> session identifier.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>session_start_time</table-cell>
+                                <table-cell>timestamp</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Timestamp of session start.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>user_name</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> user name.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>application_name</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Session application name.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>connection_from</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>IP/Host that the session was initiated from.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>state</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Was the connection successful: <id>OK</id> or <id>ERROR</id>.</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+
+                <section id="logon-table">
+                    <title>logon table</title>
+
+                    <p>Tracks information about user logons.</p>
+
+                    <table>
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>user_name</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> user name.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>last_success</table-cell>
+                                <table-cell>timestamp</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Timestamp of last successful logon.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>current_success</table-cell>
+                                <table-cell>timestamp</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Timestamp of current successful logon.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>last_failure</table-cell>
+                                <table-cell>timestamp</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Timestamp of last logon failure.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>failures_since_last_success</table-cell>
+                                <table-cell>int</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Number of failed logon attempts since the last successful logon.</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+
+                <section id="log-event-table">
+                    <title>log_event table</title>
+
+                    <p>Contains <postgres/> <id>CSV</id> log entries.  Information from the <id>CSV</id> log is loaded into this table and the <id>session</id> table.</p>
+
+                    <p>If a statement fails then the <id>state</id> column will be set to <id>error</id>.  Additional information about the error can be found by joining to the <id>log_event</id> table on the <id>session_id</id> and <id>session_line_num</id> columns.</p>
+
+                    <table>
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>session_id</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> session identifier.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>session_line_num</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential statement id generated by <postgres/>.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>log_time</table-cell>
+                                <table-cell>timestamp(3)</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Timestamp with milliseconds.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>command</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Command tag - type of session's command.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>error_severity</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Type of error (e.g. <id>ERROR</id>, <id>PANIC</id>).</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>sql_state_code</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>SQLSTATE error code.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>virtual_transaction_id</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Virtual transaction ID (backendID/localXID).</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>transaction_id</table-cell>
+                                <table-cell>bigint</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Transaction ID (0 if none is assigned).</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>message</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Text of the log message.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>detail</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Additional detail for the log message.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>hint</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>A hint for interpreting the log message.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>query</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Text of the query.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>query_pos</table-cell>
+                                <table-cell>int</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>On error, position in the query where the error occurred.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>internal_query</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Text of the internal query.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>internal_query_pos</table-cell>
+                                <table-cell>int</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>On error, position in the internal query where the error occurred.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>context</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Additional information about where the query was executed.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>location</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>On error, location in the <postgres/> source code where the error occurred.</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+
+                <section id="audit-statement-table">
+                    <title>audit_statement table</title>
+
+                    <p>Contains the top-level statement information.  A statement may contain numerous sub-statements which are tracked in the <id>audit_substatement</id> table.</p>
+
+                    <table>
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>session_id</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> session identifier.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>statement_id</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential statement ID generated by {[project]}.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>state</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Final state of the statement: <id>ok</id> or <id>error</id></table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>error_session_line_num</table-cell>
+                                <table-cell>bigint</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>If <id>state</id> is <id>error</id> then this column contains the <postgres/> session line number where error details can be found.</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+
+                <section id="audit-substatement-table">
+                    <title>audit_substatement table</title>
+
+                    <p>Contains the sub-statements that make up statement.</p>
+
+                    <p>There are many cases where a user statement can contain multiple sub-statements.  For example, if the user statement contains a <code>DO</code> block or a function call then multiple sub-statements can be generated.</p>
+
+                    <table>
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>session_id</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> session identifier.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>statement_id</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential statement ID generated by {[project]}.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>substatement_id</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential sub-statement ID generated by {[project]}.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>substatement</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Sub-statement executed.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>parameter</table-cell>
+                                <table-cell>text[]</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Parameters passed to the sub-statement.</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+
+                <section id="audit-substatement-detail-table">
+                    <title>audit_substatement_detail table</title>
+
+                    <p>Contains individual sub-statement audit events.</p>
+
+                    <p>There may be multiple auditable events in a single sub-statement.  For example, a query may have a number of tables that are being individually audit logged.  In that case, an <id>audit_substatement_detail</id> record will be created for each table.</p>
+
+                    <table>
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>session_id</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell><postgres/> session identifier.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>statement_id</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential statement ID generated by {[project]}.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>substatement_id</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential sub-statement ID generated by {[project]}.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>session_line_num</table-cell>
+                                <table-cell>numeric</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Sequential statement id generated by <postgres/>.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>audit_type</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>N</table-cell>
+                                <table-cell>Type of audit record generated: <id>SESSION</id> or <id>OBJECT</id>.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>class</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Logging class of the audit record: <id>READ</id>, <id>WRITE</id>, <id>FUNCTION</id>, <id>ROLE</id>, <id>DDL</id>, <id>MISC</id></table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>command</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>SQL command executed (e.g. <code>ALTER TABLE</code>, <code>SELECT</code>).</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>object_type</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>SQL object type (e.g. <code>TABLE</code>, <code>INDEX</code>, <code>VIEW</code>).</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>object_name</table-cell>
+                                <table-cell>text</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>The fully-qualified object name (e.g. public.account).</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+            </section>
+
+            <section id="views">
+                <title>Views</title>
+
+                <section id="audit-event-view">
+                    <title>vw_audit_event view</title>
+
+                    <p>Produces a view of the <id>pgaudit</id> schema that brings together all the major information needed for auditing an analysis.</p>
+
+                    <code-block title="View definition (join criteria removed for brevity)">
+create view pgaudit.vw_audit_event as
+select session.session_id,
+         log_event.session_line_num,
+         log_event.log_time,
+         session.user_name,
+         audit_statement.statement_id,
+         audit_statement.state,
+         audit_statement.error_session_line_num,
+         audit_substatement.substatement_id,
+         audit_substatement.substatement,
+         audit_substatement_detail.audit_type,
+         audit_substatement_detail.class,
+         audit_substatement_detail.command,
+         audit_substatement_detail.object_type,
+         audit_substatement_detail.object_name
+  from pgaudit.audit_substatement_detail
+        inner join pgaudit.log_event
+             [...]
+        inner join pgaudit.session
+             [...]
+        inner join pgaudit.audit_substatement
+             [...]
+        inner join pgaudit.audit_statement
+             [...]
+                </code-block>
+
+                </section>
+            </section>
+
+            <section id="function">
+                <title>Functions</title>
+
+                <section id="logon-info-function">
+                    <title>logon_info() function</title>
+
+                    <p>Allows the user to query logon information for the current database. The function returns the following values:</p>
+
+                    <table>
+                        <!-- <title>Function returns</title> -->
+
+                        <table-header>
+                            <table-column>Column</table-column>
+                            <table-column>Type</table-column>
+                            <table-column align="center">Nullable</table-column>
+                            <table-column fill="y">Description</table-column>
+                        </table-header>
+
+                        <table-data>
+                            <table-row>
+                                <table-cell>last_success</table-cell>
+                                <table-cell>timestamp</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Timestamp of last successful logon.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>last_failure</table-cell>
+                                <table-cell>timestamp</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Timestamp of last logon failure.</table-cell>
+                            </table-row>
+
+                            <table-row>
+                                <table-cell>failures_since_last_success</table-cell>
+                                <table-cell>int</table-cell>
+                                <table-cell>Y</table-cell>
+                                <table-cell>Number of failed logon attempts since the last successful logon.</table-cell>
+                            </table-row>
+                        </table-data>
+                    </table>
+                </section>
+            </section>
+        </section>
+
+        <section id="caveats">
+            <title>Caveats</title>
+
+            <p>* The pgaudit.logon table contains the logon information for users of the database.  If a user is renamed they must also be renamed in this table or the logon history will be lost.</p>
+
+            <p>* Reads and writes to the {[project]} schema by the user running {[project-analyze]} are never logged.</p>
+        </section>
+    </section>
+
+    <section id="set-user">
+        <title>PostgreSQL set_user Extension Module</title>
+
+        <section id="set-user-syntax">
+            <title>Syntax</title>
+
+            <code-block title="">
+set_user(text rolename) returns text
+reset_user() returns text
+            </code-block>
+        </section>
+        <section id="set-user-inputs">
+            <title>Inputs</title>
+
+            <p><b>rolename</b> is the role to be transitioned to.</p>
+        </section>
+        <section id="set-user-requirements">
+            <title>Requirements</title>
+
+            <p>* Add set_user to shared_preload_libraries in postgresql.conf.</p>
+            <p>* Optionally, the following custom parameters may be set to control their respective commands:</p>
+            <p>* set_user.block_alter_system = off (defaults to 'on')</p>
+            <p>* set_user.block_copy_program = off (defaults to 'on')</p>
+            <p>* set_user.block_log_statement = off (defaults to 'on')</p>
+        </section>
+        <section id="set-user-description">
+            <title>Description</title>
+
+            <p>This PostgreSQL extension allows privilege escalation with enhanced logging and
+            control. It provides an additional layer of logging and control when unprivileged
+            users must escalate themselves to superuser or object owner roles in order to
+            perform needed maintenance tasks. Specifically, when an allowed user executes
+            <b>set_user('rolename')</b>, several actions occur:</p>
+
+            <p>* The current effective user becomes <b>rolename</b>.</p>
+            <p>* The role transition is logged, with specific notation if <b>rolename</b> is a superuser.</p>
+            <p>* log_statement setting is set to 'all', meaning every SQL statement executed while in this state will also get logged.</p>
+            <p>* If set_user.block_alter_system is set to 'on', <b>ALTER SYSTEM</b> commands will be blocked.</p>
+            <p>* If set_user.block_copy_program is set to 'on', <b>COPY PROGRAM</b> commands will be blocked.</p>
+            <p>* If set_user.block_log_statement is set to 'on', <b>SET log_statement</b> and variations will be blocked.</p>
+
+            <p>When finished with required actions as <b>rolename</b>, the <b>reset_user()</b> function
+            is executed to restore the original user. At that point, these actions occur:</p>
+
+            <p>* Role transition is logged.</p>
+            <p>* log_statement setting is set to its original value.</p>
+            <p>* Blocked command behaviors return to normal.</p>
+
+            <p>The concept is to grant the EXECUTE privilege to the <b>set_user()</b>
+            function to otherwise unprivileged postgres users who can then
+            escalate themselves when needed to perform specific superuser actions.
+            The enhanced logging ensures an audit trail of what actions are taken
+            while privileges are escalated.</p>
+
+            <p>Once one or more unprivileged users are able to run <b>set_user()</b>,
+            the superuser account (normally <b>postgres</b>) can be altered to NOLOGIN,
+            preventing any direct database connection by a superuser which would
+            bypass the enhanced logging.</p>
+
+            <p>Naturally for this to work as expected, the PostgreSQL cluster must
+            be audited to ensure there are no other PostgreSQL roles existing which
+            are both superuser and can log in. Additionally there must be no
+            unprivileged PostgreSQL roles which have been granted access to one of
+            the existing superuser roles.</p>
+
+            <p>Note that for the blocking of <b>ALTER SYSTEM</b> and <b>COPY PROGRAM</b>
+            to work properly, you must include <b>set_user</b> in shared_preload_libraries
+            in postgresql.conf and restart PostgreSQL.</p>
+
+        </section>
+        <section id="set-user-caveats">
+            <title>Caveats</title>
+
+            <p>In its current state, this extension cannot prevent <b>rolename</b> from
+            performing a variety of nefarious or otherwise undesireable actions.
+            However, these actions will be logged providing an audit trail, which
+            could also be used to trigger alerts.</p>
+
+            <p>Although this extension compiles and works with all supported versions
+            of PostgreSQL starting with PostgreSQL 9.1, all features are not supported
+            until PostgreSQL 9.4 or higher. The ALTER SYSTEM command does not
+            exist prior to 9.4 and COPY PROGRAM does not exist prior to 9.3.</p>
+
+        </section>
+        <section id="set-user-installation">
+            <title>Installation</title>
+
+            <section id="set-user requirements">
+                <title>Requirements</title>
+
+                <p>* PostgreSQL 9.1 or higher.</p>
+            </section>
+
+            <section id="set-user-compile-and-install">
+                <title>Compile and Install</title>
+
+                <p>Clone PostgreSQL repository:</p>
+
+                <code-block title="">
+git clone https://github.com/postgres/postgres.git
+                </code-block>
+
+                <p>Checkout REL9_5_STABLE (for example) branch:</p>
+
+                <code-block title="">
+git checkout REL9_5_STABLE
+                </code-block>
+
+                <p>Make PostgreSQL:</p>
+
+                <code-block title="">
+./configure
+make install -s
+                </code-block>
+
+                <p>Change to the contrib directory:</p>
+
+                <code-block title="">
+cd contrib
+                </code-block>
+
+                <p>Clone <b>set_user</b> extension:</p>
+
+                <code-block title="">
+git clone https://github.com/pgaudit/set_user
+                </code-block>
+
+                <p>Change to <b>set_user</b> directory:</p>
+
+                <code-block title="">
+cd set_user
+                </code-block>
+
+                <p>Build <b>set_user</b>:</p>
+
+                <code-block title="">
+make
+                </code-block>
+
+                <p>Install <b>set_user</b>:</p>
+
+                <code-block title="">
+make install
+                </code-block>
+
+            </section>
+            <section id="set-user-using-pgxs">
+
+                <title>Using PGXS</title>
+
+                <p>If an instance of PostgreSQL is already installed, then PGXS can be utilized
+                to build and install <b>set_user</b>.  Ensure that PostgreSQL
+                binaries are available via the <b>PATH</b> environment variable then use the
+                following commands.</p>
+
+                <code-block title="">
+make USE_PGXS=1
+make USE_PGXS=1 install
+                </code-block>
+            </section>
+        </section>
+
+        <section id="set-user-configuration">
+            <title>Configure</title>
+
+            <p>The following bash commands should configure your system to utilize
+            set_user. Replace all paths as appropriate. It may be prudent to
+            visually inspect the files afterward to ensure the changes took place.</p>
+
+            <section id="set-user-configure-step1">
+
+                <title>Initialize PostgreSQL (if needed):</title>
+
+                <code-block title="">
+initdb -D /path/to/data/directory
+                </code-block>
+
+            </section>
+            <section id="set-user-configure-step2">
+
+                <title>Create Target Database (if needed):</title>
+
+                <code-block title="">
+createdb {database}
+                </code-block>
+
+            </section>
+            <section id="set-user-configure-step3">
+
+                <title>Install <b>set_user</b> functions:</title>
+
+                <p>Edit postgresql.conf and add <b>set_user</b> to the shared_preload_libraries
+                line, optionally also setting block_alter_system and/or block_copy_program.</p>
+
+                <p>First edit postgresql.conf in your favorite editor:</p>
+
+                <code-block title="">
+vi PGDATA/postgresql.conf
+                </code-block>
+
+                <p>Then add these lines to the end of the file:</p>
+                <code-block title="">
+# Add set_user to any existing list
+shared_preload_libraries = 'set_user'
+# The following lines are only required to turn off the
+# blocking of each respective command if desired
+set_user.block_alter_system = off       #defaults to 'on'
+set_user.block_copy_program = off       #defaults to 'on'
+set_user.block_log_statement = off      #defaults to 'on'
+                </code-block>
+
+                <p>Finally, restart PostgreSQL (method may vary):</p>
+
+                <code-block title="">
+service postgresql restart
+                </code-block>
+
+                <p>Install the extension into your database:</p>
+
+                <code-block title="">
+psql {database}
+CREATE EXTENSION set_user;
+                </code-block>
+
+            </section>
+        </section>
+
+        <section id="set-user-guc-parameters">
+            <title>GUC Parameters</title>
+
+            <p>* Block ALTER SYSTEM commands</p>
+            <p>* set_user.block_alter_system = on</p>
+            <p>* Block COPY PROGRAM commands</p>
+            <p>* set_user.block_copy_program = on</p>
+            <p>* Block SET log_statement commands</p>
+            <p>* set_user.block_log_statement = on</p>
+
+        </section>
+        <section id="set-user-examples">
+
+            <title>Examples</title>
+
+            <code-block title="">
+#################################
+# OS command line, terminal 1
+#################################
+psql -U postgres {dbname}
+
+---------------------------------
+-- psql command line, terminal 1
+---------------------------------
+SELECT rolname FROM pg_authid WHERE rolsuper and rolcanlogin;
+ rolname
+----------
+ postgres
+(1 row)
+
+CREATE EXTENSION set_user;
+CREATE USER dba_user;
+GRANT EXECUTE ON FUNCTION set_user(text) TO dba_user;
+
+#################################
+# OS command line, terminal 2
+#################################
+psql -U dba_user {dbname}
+
+---------------------------------
+-- psql command line, terminal 2
+---------------------------------
+SELECT set_user('postgres');
+SELECT CURRENT_USER, SESSION_USER;
+ current_user | session_user
+--------------+--------------
+ postgres     | dba_user
+(1 row)
+
+SELECT reset_user();
+SELECT CURRENT_USER, SESSION_USER;
+ current_user | session_user
+--------------+--------------
+ dba_user     | dba_user
+(1 row)
+
+\q
+
+---------------------------------
+-- psql command line, terminal 1
+---------------------------------
+ALTER USER postgres NOLOGIN;
+-- repeat terminal 2 test with dba_user before exiting
+\q
+
+#################################
+# OS command line, terminal 1
+#################################
+tail -n 6 {postgres log}
+LOG:  Role dba_user transitioning to Superuser Role postgres
+STATEMENT:  SELECT set_user('postgres');
+LOG:  statement: SELECT CURRENT_USER, SESSION_USER;
+LOG:  statement: SELECT reset_user();
+LOG:  Superuser Role postgres transitioning to Role dba_user
+STATEMENT:  SELECT reset_user();
+
+#################################
+# OS command line, terminal 2
+#################################
+psql -U dba_user {dbname}
+
+---------------------------------
+-- psql command line, terminal 2
+---------------------------------
+-- Verify there are no superusers that can login directly
+SELECT rolname FROM pg_authid WHERE rolsuper and rolcanlogin;
+ rolname
+---------
+(0 rows)
+
+-- Verify there are no unprivileged roles that can login directly
+-- that are granted a superuser role even if it is multiple layers
+-- removed
+DROP VIEW IF EXISTS roletree;
+CREATE OR REPLACE VIEW roletree AS
+WITH RECURSIVE
+roltree AS (
+  SELECT u.rolname AS rolname,
+         u.oid AS roloid,
+         u.rolcanlogin,
+         u.rolsuper,
+         '{}'::name[] AS rolparents,
+         NULL::oid AS parent_roloid,
+         NULL::name AS parent_rolname
+  FROM pg_catalog.pg_authid u
+  LEFT JOIN pg_catalog.pg_auth_members m on u.oid = m.member
+  LEFT JOIN pg_catalog.pg_authid g on m.roleid = g.oid
+  WHERE g.oid IS NULL
+  UNION ALL
+  SELECT u.rolname AS rolname,
+         u.oid AS roloid,
+         u.rolcanlogin,
+         u.rolsuper,
+         t.rolparents || g.rolname AS rolparents,
+         g.oid AS parent_roloid,
+         g.rolname AS parent_rolname
+  FROM pg_catalog.pg_authid u
+  JOIN pg_catalog.pg_auth_members m on u.oid = m.member
+  JOIN pg_catalog.pg_authid g on m.roleid = g.oid
+  JOIN roltree t on t.roloid = g.oid
+)
+SELECT
+  r.rolname,
+  r.roloid,
+  r.rolcanlogin,
+  r.rolsuper,
+  r.rolparents
+FROM roltree r
+ORDER BY 1;
+
+-- For example purposes, given this set of roles
+SELECT r.rolname, r.rolsuper, r.rolinherit,
+  r.rolcreaterole, r.rolcreatedb, r.rolcanlogin,
+  r.rolconnlimit, r.rolvaliduntil,
+  ARRAY(SELECT b.rolname
+        FROM pg_catalog.pg_auth_members m
+        JOIN pg_catalog.pg_roles b ON (m.roleid = b.oid)
+        WHERE m.member = r.oid) as memberof
+, r.rolreplication
+, r.rolbypassrls
+FROM pg_catalog.pg_roles r
+ORDER BY 1;
+                                    List of roles
+ Role name |                         Attributes                         | Member of
+-----------+------------------------------------------------------------+------------
+ bob       |                                                            | {}
+ dba_user  |                                                            | {su}
+ joe       |                                                            | {newbs}
+ newbs     | Cannot login                                               | {}
+ postgres  | Superuser, Create role, Create DB, Replication, Bypass RLS | {}
+ su        | No inheritance, Cannot login                               | {postgres}
+
+-- This query shows current status is not acceptable
+-- 1) postgres can login directly
+-- 2) dba_user can login and is able to escalate without using set_user()
+SELECT
+  ro.rolname,
+  ro.roloid,
+  ro.rolcanlogin,
+  ro.rolsuper,
+  ro.rolparents
+FROM roletree ro
+WHERE (ro.rolcanlogin AND ro.rolsuper)
+OR
+(
+    ro.rolcanlogin AND EXISTS
+    (
+      SELECT TRUE FROM roletree ri
+      WHERE ri.rolname = ANY (ro.rolparents)
+      AND ri.rolsuper
+    )
+);
+ rolname  | roloid | rolcanlogin | rolsuper |  rolparents
+----------+--------+-------------+----------+---------------
+ dba_user |  16387 | t           | f        | {postgres,su}
+ postgres |     10 | t           | t        | {}
+(2 rows)
+
+-- Fix it
+REVOKE postgres FROM su;
+ALTER USER postgres NOLOGIN;
+
+-- Rerun the query - shows current status is acceptable
+SELECT
+  ro.rolname,
+  ro.roloid,
+  ro.rolcanlogin,
+  ro.rolsuper,
+  ro.rolparents
+FROM roletree ro
+WHERE (ro.rolcanlogin AND ro.rolsuper)
+OR
+(
+    ro.rolcanlogin AND EXISTS
+    (
+      SELECT TRUE FROM roletree ri
+      WHERE ri.rolname = ANY (ro.rolparents)
+      AND ri.rolsuper
+    )
+);
+ rolname | roloid | rolcanlogin | rolsuper | rolparents
+---------+--------+-------------+----------+------------
+(0 rows)
+            </code-block>
+
+        </section>
+        <section id="set-user-licensing">
+
+            <title>Licensing</title>
+
+            <p>Please see the LICENSE file.</p>
+        </section>
+   </section>
+
+</doc>
