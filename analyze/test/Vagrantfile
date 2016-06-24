@@ -75,7 +75,9 @@ Vagrant.configure(2) do |config|
                 epstopdf courier sectsty pgf ms
 
             # Clone backrest repo to build docs
-            git clone https://github.com/pgmasters/backrest.git /backrest
+            git clone https://github.com/pgmasters/pgbackrest.git /backrest
+            cd /backrest
+            git checkout release/0.92
         SHELL
     end
 
