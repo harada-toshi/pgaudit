@@ -1,0 +1,21 @@
+		format='AUDIT: %object_id,%command_parameter,%command_text'
+LOG:  AUDIT: ,,BEGIN;
+LOG:  AUDIT: ,,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: pg_catalog.pg_extension,,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: ,,EXECUTE prep_dx ('plpgsql','1.0');
+LOG:  AUDIT: ,,DEALLOCATE PREPARE prep_dx;
+LOG:  AUDIT: ,,COMMIT;
+		format='AUDIT: %object_id,%command_parameter,%command_text'
+LOG:  AUDIT: ,,BEGIN;
+LOG:  AUDIT: ,,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: pg_catalog.pg_extension,plpgsql 1.0,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: ,,EXECUTE prep_dx ('plpgsql','1.0');
+LOG:  AUDIT: ,,DEALLOCATE PREPARE prep_dx;
+LOG:  AUDIT: ,,COMMIT;
+		format='AUDIT: %object_id,%command_parameter,%command_text'
+LOG:  AUDIT: ,,BEGIN;
+LOG:  AUDIT: ,,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: pg_catalog.pg_extension,,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: ,,EXECUTE prep_dx ('plpgsql','1.0');
+LOG:  AUDIT: ,,DEALLOCATE PREPARE prep_dx;
+LOG:  AUDIT: ,,COMMIT;

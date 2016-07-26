@@ -1,0 +1,3 @@
+LOG:  AUDIT: OBJECT,6,1,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;,<not logged>
+LOG:  AUDIT: OBJECT,7,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;",<not logged>
+LOG:  AUDIT: OBJECT,8,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>

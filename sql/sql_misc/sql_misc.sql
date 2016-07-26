@@ -1,0 +1,22 @@
+CREATE TABLE foo (id int primary key, data text);
+INSERt INTO foo VALUES (1, 'aaa'),(2, 'bbb'),(3,'ccc');
+
+-- VACUUM, ANALYZE,CHECKPOINT
+VACUUM foo;
+ANALYZE foo;
+CHECKPOINT;
+
+-- FETCH
+BEGIN;
+DECLARE mycur CURSOR FOR SELECT * FROM foo;
+FETCH FORWARD 2 FROM mycur;
+FETCH PRIOR FROM mycur;
+PREPARE myprep AS SELECT * FROM foo WHERE id = $1;
+EXECUTE myprep(2);
+END;
+
+-- DISCARD
+DISCARD ALL;
+
+DROP TABLE foo;
+

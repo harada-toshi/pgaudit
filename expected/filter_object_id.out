@@ -1,0 +1,15 @@
+	        format = 'AUDIT:(1) %class,%command_tag,%object_type,%object_id,%command_text'
+	        format = 'AUDIT:(2) %class,%command_tag,%object_type,%object_id,%command_text'
+	        format = 'AUDIT:(3) %class,%command_tag,%object_type,%object_id,%command_text'
+LOG:  AUDIT:(1) WRITE,INSERT,TABLE,public.foo,INSERT INTO foo VALUES (1, 'aaa');
+LOG:  AUDIT:(2) WRITE,INSERT,TABLE,public.foo,INSERT INTO foo VALUES (1, 'aaa');
+LOG:  AUDIT:(3) WRITE,INSERT,TABLE,public.foo,INSERT INTO foo VALUES (1, 'aaa');
+LOG:  AUDIT:(1) WRITE,UPDATE,TABLE,public.foo,UPDATE foo SET data = 'AAA' WHERE id = 1;
+LOG:  AUDIT:(2) WRITE,UPDATE,TABLE,public.foo,UPDATE foo SET data = 'AAA' WHERE id = 1;
+LOG:  AUDIT:(3) WRITE,UPDATE,TABLE,public.foo,UPDATE foo SET data = 'AAA' WHERE id = 1;
+LOG:  AUDIT:(1) READ,SELECT,TABLE,public.foo,SELECT * FROM foo;
+LOG:  AUDIT:(2) READ,SELECT,TABLE,public.foo,SELECT * FROM foo;
+LOG:  AUDIT:(3) READ,SELECT,TABLE,public.foo,SELECT * FROM foo;
+LOG:  AUDIT:(1) WRITE,DELETE,TABLE,public.foo,DELETE FROM foo;
+LOG:  AUDIT:(2) WRITE,DELETE,TABLE,public.foo,DELETE FROM foo;
+LOG:  AUDIT:(3) WRITE,DELETE,TABLE,public.foo,DELETE FROM foo;

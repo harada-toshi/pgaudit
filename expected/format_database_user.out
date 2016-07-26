@@ -1,0 +1,4 @@
+	        format = 'AUDIT:(1) %database,%user,%current_user,%command_text'
+	        format = 'AUDIT:(2) %d,%u,%current_user,%command_text'
+LOG:  AUDIT:(1) foo,foo_user,foo_user,SELECT 1
+LOG:  AUDIT:(2) foo,foo_user,foo_user,SELECT 1

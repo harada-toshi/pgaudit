@@ -1,0 +1,6 @@
+	        format = 'AUDIT:(A) %pid,%virtual_xid,%command_text'
+	        format = 'AUDIT:(B) %p,%v,%command_text'
+LOG:  AUDIT:(A) X,X/X,SELECT 'ABC';
+LOG:  AUDIT:(B) X,X/X,SELECT 'ABC';
+LOG:  AUDIT:(A) X,X/X,SELECT * FROM foo;
+LOG:  AUDIT:(B) X,X/X,SELECT * FROM foo;

@@ -1,0 +1,14 @@
+	        format = 'AUDIT:(A) %class,%remote_host,%remote_port,%connection_message'
+	        format = 'AUDIT:(B) %class,%h,%remote_port,%connection_message'
+LOG:  AUDIT:(A) CONNECT,[local],,received
+LOG:  AUDIT:(B) CONNECT,[local],,received
+LOG:  AUDIT:(A) CONNECT,[local],,authorized
+LOG:  AUDIT:(B) CONNECT,[local],,authorized
+LOG:  AUDIT:(A) CONNECT,[local],,disconnected
+LOG:  AUDIT:(B) CONNECT,[local],,disconnected
+LOG:  AUDIT:(A) CONNECT,[local],,received
+LOG:  AUDIT:(B) CONNECT,[local],,received
+LOG:  AUDIT:(A) CONNECT,[local],,authorized
+LOG:  AUDIT:(B) CONNECT,[local],,authorized
+LOG:  AUDIT:(A) CONNECT,[local],,disconnected
+LOG:  AUDIT:(B) CONNECT,[local],,disconnected

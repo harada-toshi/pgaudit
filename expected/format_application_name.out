@@ -1,0 +1,5 @@
+	        format = 'AUDIT:(1) %application_name,%d,%class,%command_text'
+	        format = 'AUDIT:(2) %a,%d,%class,%command_text'
+LOG:  AUDIT:(2) createdb,postgres,DDL,CREATE DATABASE foo;
+LOG:  AUDIT:(1) psql,foo,READ,SELECT 1
+LOG:  AUDIT:(2) dropdb,postgres,DDL,DROP DATABASE foo;

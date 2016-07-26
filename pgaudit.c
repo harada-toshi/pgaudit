@@ -1,17 +1,20 @@
-/*------------------------------------------------------------------------------
+/*
  * pgaudit.c
  *
+ * Copyright (c) 2016, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ */
+
+/*------------------------------------------------------------------------------
  * An audit logging extension for PostgreSQL. Provides detailed logging classes,
  * object level logging, and fully-qualified object names for all DML and DDL
  * statements where possible (See pgaudit.sgml for details).
- *
- * Copyright (c) 2014-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *          contrib/pgaudit/pgaudit.c
  *------------------------------------------------------------------------------
  */
 #include "postgres.h"
+#include "pgtime.h"
 
 #include "access/htup_details.h"
 #include "access/sysattr.h"
@@ -39,12 +42,31 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
+#include "storage/proc.h"
+#include "pgaudit.h"
+
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
 
 PG_FUNCTION_INFO_V1(pgaudit_ddl_command_end);
 PG_FUNCTION_INFO_V1(pgaudit_sql_drop);
+
+/*
+ * Debug: function trace
+ */
+static bool isStartTrace = false;
+static int z=1;
+static char Z[1000];
+#define PGA_FUNCTION_TRACE(str) { \
+    if (!strcmp((str),"IN-")) z++; \
+    memset(Z,' ',z*2);\
+    Z[z*2+1]='\0';\
+    if (isStartTrace) ELOG(DEBUG3, \
+        "PGA_FUNCTION_TRACE:pgaudit.c:%s:%s%s",(str), Z, __func__); \
+    if (strcmp((str),"IN-")) z--; \
+    if (z>50) z=10; \
+}
 
 /*
  * Log Classes
@@ -63,15 +85,8 @@ PG_FUNCTION_INFO_V1(pgaudit_sql_drop);
 #define LOG_READ        (1 << 3)    /* SELECTs */
 #define LOG_ROLE        (1 << 4)    /* GRANT/REVOKE, CREATE/ALTER/DROP ROLE */
 #define LOG_WRITE       (1 << 5)    /* INSERT, UPDATE, DELETE, TRUNCATE */
-
 #define LOG_NONE        0               /* nothing */
 #define LOG_ALL         (0xFFFFFFFF)    /* All */
-
-/* GUC variable for pgaudit.log, which defines the classes to log. */
-char *auditLog = NULL;
-
-/* Bitmap of classes selected */
-static int auditLogBitmap = LOG_NONE;
 
 /*
  * String constants for log classes - used when processing tokens in the
@@ -83,23 +98,42 @@ static int auditLogBitmap = LOG_NONE;
 #define CLASS_READ      "READ"
 #define CLASS_ROLE      "ROLE"
 #define CLASS_WRITE     "WRITE"
-
 #define CLASS_NONE      "NONE"
 #define CLASS_ALL       "ALL"
 
 /*
- * GUC variable for pgaudit.log_catalog
+ * GUC variables.
  *
- * Administrators can choose to NOT log queries when all relations used in
+ * pgaudit_deployConfigulations.c::pgaudit_set_options() sets these values.
+ */
+
+/*
+ *  variable for pgaudit.log, which defines the classes to log. 
+ *  
+ * 	char *auditLog = NULL;
+ */
+
+/*
+ * variable for pgaudit.file	2016.03
+ * 
+ * Administrators can specify the path to the configuration file Auditors
+ * manages. Auditors can choose the setting following, and more.
+ */
+char *config_file = NULL;
+
+/*
+ * variables for pgaudit.option.log_catalog
+ *
+ * Auditors can choose to NOT log queries when all relations used in
  * the query are in pg_catalog.  Interactive sessions (eg: psql) can cause
  * a lot of noise in the logs which might be uninteresting.
  */
 bool auditLogCatalog = true;
 
 /*
- * GUC variable for pgaudit.log_level
+ * variable for pgaudit.option.log_level
  *
- * Administrators can choose which log level the audit log is to be logged
+ * Auditors can choose which log level the audit log is to be logged
  * at.  The default level is LOG, which goes into the server log but does
  * not go to the client.  Set to NOTICE in the regression tests.
  */
@@ -107,9 +141,9 @@ char *auditLogLevelString = NULL;
 int auditLogLevel = LOG;
 
 /*
- * GUC variable for pgaudit.log_parameter
+ * variable for pgaudit.option.log_parameter
  *
- * Administrators can choose if parameters passed into a statement are
+ * Auditors can choose if parameters passed into a statement are
  * included in the audit log.
  */
 bool auditLogParameter = false;
@@ -121,12 +155,11 @@ bool auditLogParameter = false;
  * in READ/WRITE class queries.  By default, SESSION logs include the query but
  * do not have a log entry for each relation.
  */
-bool auditLogRelation = false;
 
 /*
- * GUC variable for pgaudit.log_statement_once
+ * variable for pgaudit.option.log_statement_once
  *
- * Administrators can choose to have the statement run logged only once instead
+ * Auditors can choose to have the statement run logged only once instead
  * of on every line.  By default, the statement is repeated on every line of
  * the audit log to facilitate searching, but this can cause the log to be
  * unnecessairly bloated in some environments.
@@ -134,9 +167,9 @@ bool auditLogRelation = false;
 bool auditLogStatementOnce = false;
 
 /*
- * GUC variable for pgaudit.role
+ * variable for pgaudit.option.role
  *
- * Administrators can choose which role to base OBJECT auditing off of.
+ * Auditors can choose which role to base OBJECT auditing off of.
  * Object-level auditing uses the privileges which are granted to this role to
  * determine if a statement should be logged.
  */
@@ -169,6 +202,26 @@ char *auditRole = NULL;
 #define COMMAND_DELETE      "DELETE"
 #define COMMAND_EXECUTE     "EXECUTE"
 #define COMMAND_UNKNOWN     "UNKNOWN"
+
+/* 2016.03
+ * Command used for Connection/Utility calls.
+ *
+ * We handle these by Message in emit_log_hook.
+ */
+#define COMMAND_CONNECT     "CONNECT"
+#define COMMAND_SYSTEM      "SYSTEM"
+#define COMMAND_BACKUP      "BACKUP"
+
+/* 2016.03
+ * Message, used for Connection/Utility calls.
+ */
+#define MESSAGE_RECEIVED    "received"
+#define MESSAGE_AUTHORIZED  "authorized"
+#define MESSAGE_DISCONNECTED "disconnected"
+#define MESSAGE_READY       "ready"
+#define MESSAGE_NORMALENDED "normal ended"
+#define MESSAGE_INTERRUPTED "interrupted"
+
 
 /*
  * Object type, used for SELECT/DML statements and function calls.
@@ -270,8 +323,487 @@ static bool internalStatement = false;
 static int64 statementTotal = 0;
 static int64 substatementTotal = 0;
 static int64 stackTotal = 0;
-
 static bool statementLogged = false;
+
+/*------------------------------------------------------------------------------
+ * SESSION AUDIT LOGGING : flag, data and functions
+ */
+
+/*
+ *	A Memory Context for pgaudit 2016.03
+ *
+ *	Permanent.
+ *	The Memory in this context is allocated at _PG_init(postmaster) and used 
+ *	under the hooks(postmaster & backends)
+ */
+MemoryContext contextAuditPermanent;
+
+/*
+ * item logging fields.	2016.03
+ *
+ * Max length for a timestamp character string.
+ */
+#define FORMATTED_TS_LEN 128
+
+/*
+ * Flag to prevent the recursive call of emit_log_hook.
+ */
+/* static */ int  emitLogCalled=0;
+
+/*
+ * Flag that displays the data collection situation for pgaudit_ExecutorEnd_hook
+ */
+static bool keptDMLLogData = false;
+
+/*
+ * GUC Flags that should be True always in order to hook the eventsi at 
+ * emit_log_hook.
+ */
+extern bool Log_connections;
+extern bool Log_disconnections;
+extern bool log_replication_commands;
+/*
+ * Buckup Flags. The value will set to edata at the event at emit_log_hook.
+ */
+static bool saveLogConnections = true;
+static bool saveLogDisconnections = true;
+static bool saveLogReplicationCommands = true;
+/*
+ * Flags that displays inner status og pgaudit.
+ */
+static bool isPGinitDone = false;
+static bool utilityStatement = false;
+static bool executorStart = false;
+
+/*
+ * Messageid 2016.03
+ *
+ * message-ids that the pgaudit_emit_log_hook() handles.
+ */
+#define MsgId_Connection1 \
+"connection received: host=%s port=%s"
+#define MsgId_Connection2 \
+"connection authorized: user=%s database=%s"
+#define MsgId_DisConnect \
+"disconnection: session time: %d:%02d:%02d.%03d user=%s database=%s host=%s%s%s"
+#define MsgId_ShutDown1 \
+"database system was shut down at %s"
+#define MsgId_ShutDown2 \
+"database system was shut down in recovery at %s"
+#define MsgId_Interrupt1 \
+"database system was interrupted while in recovery at %s"
+#define MsgId_Interrrupt2 \
+"database system was interrupted while in recovery at log time %s"
+#define MsgId_Interrrupt3 \
+"database system was interrupted; last known up at %s"
+#define MsgId_Redy \
+"database system is ready to accept connections"
+#define MsgId_Replication \
+"received replication command: BASE_BACKUP"
+#define MsgId_NewTimeline \
+"selected new timeline ID: %u"
+#define MsgId_PC \
+"parameter \"%s\" changed to \"%s\""
+
+/*
+ *	Message 2016.03
+ *
+ *	Part of the Messages corresponding to the locale. Pgaudit_emit_log_hook() 
+ *	recognizes an event by right truncation of an actual message.
+ */
+#define PGAUDIT_MSG_MATCH_MAX 200
+static char 		   
+Msg_Connection1[ PGAUDIT_MSG_MATCH_MAX ],
+Msg_Connection2[ PGAUDIT_MSG_MATCH_MAX ],
+Msg_DisConnect[  PGAUDIT_MSG_MATCH_MAX ],
+Msg_ShutDown1[   PGAUDIT_MSG_MATCH_MAX ],
+Msg_ShutDown2[   PGAUDIT_MSG_MATCH_MAX ],
+Msg_Interrupt1[  PGAUDIT_MSG_MATCH_MAX ],
+Msg_Interrrupt2[ PGAUDIT_MSG_MATCH_MAX ],
+Msg_Interrrupt3[ PGAUDIT_MSG_MATCH_MAX ],
+Msg_Redy[        PGAUDIT_MSG_MATCH_MAX ],
+Msg_Replication[ PGAUDIT_MSG_MATCH_MAX ],
+Msg_NewTimeline[ PGAUDIT_MSG_MATCH_MAX ],
+Msg_PC_LC[       PGAUDIT_MSG_MATCH_MAX ],
+Msg_PC_LD[		 PGAUDIT_MSG_MATCH_MAX ],
+Msg_PC_RP[		 PGAUDIT_MSG_MATCH_MAX ];
+
+/*
+ * initMessages		2016.03
+ *   ->msgidToMsg
+ *   ->msgidToMsgWithStr
+ *
+ * Apply the locale to the messages those emit_log_hook() handles.
+ */
+
+/* Convert messageid to pattern mach string with the locale.*/
+static void 
+pgaudit_msgidToMsg(char *msgid, char *to)
+{
+    char *x = dgettext( 0, msgid );
+    int   i =0;
+
+    /* copy till an escape. */
+    for (i=0; i<(PGAUDIT_MSG_MATCH_MAX-1); i++)
+    {
+        if ( x[i] == '%' || x[i] == '\0' )
+            break;
+        to[i] = x[i];
+    }
+    to[i] = '\0';
+}
+
+/*
+ * Convert messageid to pattern mach string with the locale, 
+ * and embeds a str to the message.
+ */
+static void 
+pgaudit_msgidToMsgWithStr(char *msgid, char *to, char *str)
+{
+    char  y[PGAUDIT_MSG_MATCH_MAX];
+    char *x = dgettext( 0, msgid );
+    int   i =0;
+
+    /* embeds a str to the message. */
+    strncpy(y, x, (PGAUDIT_MSG_MATCH_MAX-strlen(str)-1));
+    sprintf(to, y, str, "%s");
+
+    /* avoid the remaining escapes. */
+    for (i=0; i<(PGAUDIT_MSG_MATCH_MAX-1); i++)
+        if ( to[i] == '%' || to[i] == '\0' )
+            break;
+    to[i] = '\0';
+}
+
+static void 
+pgaudit_initMessages()
+{
+    /* CONNECTION levael Messages */
+    pgaudit_msgidToMsg( MsgId_Connection1,	Msg_Connection1 ); 
+    pgaudit_msgidToMsg( MsgId_Connection2,	Msg_Connection2 ); 
+    pgaudit_msgidToMsg( MsgId_DisConnect, 	Msg_DisConnect ); 
+    pgaudit_msgidToMsg( MsgId_ShutDown1,	Msg_ShutDown1 ); 
+    pgaudit_msgidToMsg( MsgId_ShutDown2,	Msg_ShutDown2 ); 
+    pgaudit_msgidToMsg( MsgId_Interrupt1,	Msg_Interrupt1 ); 
+    pgaudit_msgidToMsg( MsgId_Interrrupt2,	Msg_Interrrupt2 ); 
+    pgaudit_msgidToMsg( MsgId_Interrrupt3,	Msg_Interrrupt3 ); 
+    pgaudit_msgidToMsg( MsgId_Redy,			Msg_Redy ); 
+    pgaudit_msgidToMsg( MsgId_Replication,	Msg_Replication ); 
+    pgaudit_msgidToMsg( MsgId_NewTimeline,	Msg_NewTimeline ); 
+
+    /* GUC Changed */
+    pgaudit_msgidToMsgWithStr(MsgId_PC, Msg_PC_LC, "log_connections");
+    pgaudit_msgidToMsgWithStr(MsgId_PC, Msg_PC_LD, "log_disconnections");
+    pgaudit_msgidToMsgWithStr(MsgId_PC, Msg_PC_RP, "log_replication_commands");
+
+    ELOG(DEBUG3, "Msg_PC_LC=[%s]", Msg_PC_LC);
+    ELOG(DEBUG3, "Msg_PC_LD=[%s]", Msg_PC_LD);
+    ELOG(DEBUG3, "Msg_PC_RP=[%s]", Msg_PC_RP);
+}
+
+/*
+ * initItems	2016.03
+ *
+ *	initialise the item logging fields.
+ */
+static void
+pgaudit_initItems(bool isAll)
+{
+    MemoryContext contextOld;
+    static bool isInitStringInfo = true;
+    pgauditDataIndex *index = pgauditDataIndexes;
+    int i=0;
+
+PGA_FUNCTION_TRACE("IN-");
+    contextOld = MemoryContextSwitchTo(contextAuditPermanent);
+
+    /* init StringInfo */
+    if (isInitStringInfo) 
+    {
+        for (i=application_name_i; i<=virtual_xid_i; i++)
+            if (index[i].type)
+            	initStringInfo(index[i].data.flex);
+
+    }
+
+    /* All Clear */
+    for (i=application_name_i; i<=virtual_xid_i; i++)
+        switch (i)
+        {
+        case null_item_i:
+        case format_text_i:
+            /* use default always */
+            break;
+        case command_result_i:
+            /* default of command_result is "00000" */
+            strcpy(index[i].data.fix, " 00000 ");
+            break;
+        case current_user_i:
+            if (isInitStringInfo)
+            	break;
+        case application_name_i:
+        case database_i:
+        case pid_i:
+        case remote_host_i:
+        case remote_port_i:
+        case user_i:
+            if (!isAll)
+            	break;
+        default:
+            switch (index[i].type)
+            {
+            case fix:
+            	strcpy(index[i].data.fix, pgauditNullString);
+            	break;
+            case flex:
+            	resetStringInfo(index[i].data.flex);
+            	appendStringInfoCharMacro(index[i].data.flex, ' ');
+            	break;
+            case direct:
+            default:
+            	index[i].data.fix = (char*) pgauditNullString;
+            	break;
+            }
+            break;
+        }
+
+    isInitStringInfo = false; 
+    
+    MemoryContextSwitchTo(contextOld);
+PGA_FUNCTION_TRACE("OUT");
+}
+/*
+ * pgaudit_setTimestamps 2015.03
+ *
+ *  set a timestamp(to print) and seconds of a day(to ievaluate).
+ */
+static void
+pgaudit_setTimestamps(void)
+{
+    pgauditDataIndex *x = &pgauditDataIndexes[timestamp_i];
+    struct timeval tv;
+    pg_time_t	stamp_time;
+    struct pg_tm	*pg_time;
+
+    /* get the current time */
+    gettimeofday(&tv, NULL);
+    stamp_time = (pg_time_t) tv.tv_sec;
+    
+    /* set the output string */
+    pg_time = pg_localtime(&stamp_time, log_timezone);
+    pg_strftime(x->data.fix, FORMATTED_TS_LEN, " %Y-%m-%d %H:%M:%S     %Z ", pg_time);
+
+    /* set the filter value */
+    pgauditLogSecOfDay = (pg_time->tm_hour*60*60) + (pg_time->tm_min*60) + pg_time->tm_sec;
+}
+
+/*
+ * set a text to the item logging field.
+ */
+static void pgaudit_setTextToField(enum pgauditItem item, char *text, bool isClear)
+{
+    MemoryContext contextOld;
+    pgauditDataIndex *x=&pgauditDataIndexes[item];
+
+    if ( x->type == flex )
+    {
+        contextOld = MemoryContextSwitchTo(contextAuditPermanent);
+
+        if ( isClear )
+        {
+            resetStringInfo(x->data.flex); 
+            appendStringInfoCharMacro(x->data.flex, ' ');
+        }
+
+        if( ( text ) && ( *text != '\0' ) )
+        {
+            /* set txt to the logging field. */
+            appendStringInfoString(x->data.flex, text);
+            appendStringInfoCharMacro(x->data.flex, ' ');
+        }
+
+        MemoryContextSwitchTo(contextOld); 
+    }
+    else
+    {
+        char *to = x->data.fix;
+
+        if ( isClear )
+            strcpy(to, " ");
+
+        if( ( text ) && ( *text != '\0' ) )
+        {
+            while ( *to != '\0' ) to++;
+            sprintf(to, "%s ", text);
+        }
+    }
+}
+
+static void
+set_process_id(void)
+{
+    pgauditDataIndex *x=&pgauditDataIndexes[pid_i];
+
+PGA_FUNCTION_TRACE("IN-");
+    sprintf( x->data.fix, " %d ", MyProcPid );
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_statement_id(void)
+{
+    pgauditDataIndex *x=&pgauditDataIndexes[statement_id_i];
+
+PGA_FUNCTION_TRACE("IN-");
+    ELOG(DEBUG3, "statementTotal=[[%ld]]", statementTotal);
+    sprintf( x->data.fix, " %ld ", statementTotal);
+    ELOG(DEBUG3, "x[statement_id_i].data.fix=[[%s]]", x[statement_id_i].data.fix);
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_substatement_id(void)
+{
+    pgauditDataIndex *x=&pgauditDataIndexes[sub_statement_id_i];
+
+PGA_FUNCTION_TRACE("IN-");
+    ELOG(DEBUG3, "substatementTotal=[[%ld]]", substatementTotal);
+    sprintf( x->data.fix, " %ld ", substatementTotal);
+    ELOG(DEBUG3, "x[sub_statement_id_i].data.fix=[[%s]]", x[sub_statement_id_i].data.fix);
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_virtual_x_id(void)
+{
+    pgauditDataIndex *x=&pgauditDataIndexes[virtual_xid_i];
+
+PGA_FUNCTION_TRACE("IN-");
+    if( ( MyProc ) && (MyProc->backendId) && (MyProc->lxid) )
+        sprintf(x->data.fix, " %d/%u ", MyProc->backendId, MyProc->lxid);
+    else
+        sprintf(x->data.fix, "%s", " ");
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_command_result(int sqlErrorCode)
+{
+    pgauditDataIndex *x=&pgauditDataIndexes[command_result_i];
+
+PGA_FUNCTION_TRACE("IN-");
+    sprintf(x->data.fix, " %s ", unpack_sql_state(sqlErrorCode));
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_remote_host()
+{
+PGA_FUNCTION_TRACE("IN-");
+    if ( MyProcPort ) 
+        pgaudit_setTextToField(remote_host_i, MyProcPort->remote_host, true);
+    else
+        pgaudit_setTextToField(remote_host_i, NULL, true); 
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_remote_port()
+{
+PGA_FUNCTION_TRACE("IN-");
+    if( MyProcPort ) 
+        pgaudit_setTextToField(remote_port_i, MyProcPort->remote_port, true);
+    else
+        pgaudit_setTextToField(remote_port_i, NULL, true); 
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_database_name(void)
+{
+PGA_FUNCTION_TRACE("IN-");
+    if( MyProcPort )
+        pgaudit_setTextToField(database_i, MyProcPort->database_name, true);
+    else
+        pgaudit_setTextToField(database_i, NULL, true);
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_session_user_name()
+{
+PGA_FUNCTION_TRACE("IN-");
+    if( MyProcPort )
+        pgaudit_setTextToField(user_i, MyProcPort->user_name, true);
+    else
+        pgaudit_setTextToField(user_i, NULL, true);
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+set_interim_current_user()
+{
+PGA_FUNCTION_TRACE("IN-");
+    if( MyProcPort )
+        pgaudit_setTextToField(current_user_i, MyProcPort->user_name, true);
+    else
+        pgaudit_setTextToField(current_user_i, NULL, true);
+PGA_FUNCTION_TRACE("OUT");
+}
+
+
+/*
+ *  A debug function:
+ *      output all items to ELOG, debug1.
+ */
+static void pgaudit_printData4debug(void)
+{
+    MemoryContext contextOld;
+    static StringInfoData buf;
+    static bool isFirst = true;
+    pgauditDataIndex *x=pgauditDataIndexes;
+
+    if (log_min_messages > DEBUG1)
+        return;
+
+    contextOld = MemoryContextSwitchTo(contextAuditPermanent);
+
+    if ( isFirst )
+        initStringInfo(&buf);
+    else
+        resetStringInfo(&buf);
+    isFirst = false;
+
+    appendStringInfoString(&buf, "HEADER[ AuditLog2 ],");
+    appendStringInfo(&buf, "PID[%s],", 			x[pid_i].data.fix);
+    appendStringInfo(&buf, "STATEMENTID[%s],", 	x[statement_id_i].data.fix);
+    appendStringInfo(&buf, "SUBSTATEMENTID[%s],", x[sub_statement_id_i].data.fix);
+    appendStringInfo(&buf, "TIMESTAMP[%s],", 	x[timestamp_i].data.fix);
+    appendStringInfo(&buf, "SECOFDAY[%d],", 	pgauditLogSecOfDay);
+    appendStringInfo(&buf, "DATABASE[%s],", 	x[database_i].data.flex->data);
+    appendStringInfo(&buf, "CURRENTUSER[%s],", 	x[current_user_i].data.flex->data);
+    appendStringInfo(&buf, "SESSIONUSER[%s],", 	x[user_i].data.flex->data);
+    appendStringInfo(&buf, "CLASS[%s],", 		x[class_i].data.flex->data);
+    appendStringInfo(&buf, "TAG[%s],", 			x[command_tag_i].data.flex->data);
+    appendStringInfo(&buf, "OBJECTTYPE[%s],", 	x[object_type_i].data.flex->data);
+    appendStringInfo(&buf, "OBJECTID[%s],", 	x[object_id_i].data.flex->data);
+    appendStringInfo(&buf, "PROTOCOL[%s],", 	x[application_name_i].data.flex->data);
+    appendStringInfo(&buf, "VIRTUALXID[%s],", 	x[virtual_xid_i].data.fix);
+    appendStringInfo(&buf, "RESULT[%s],", 		x[command_result_i].data.fix);
+    appendStringInfo(&buf, "TEXT[%s],", 		x[command_text_i].data.flex->data);
+    appendStringInfo(&buf, "PARAMETER[%s],", 	x[command_parameter_i].data.flex->data);
+    appendStringInfo(&buf, "REMOTEHOST[%s],", 	x[remote_host_i].data.fix);
+    appendStringInfo(&buf, "REMOTEPORT[%s]", 	x[remote_port_i].data.fix);
+    appendStringInfo(&buf, "MESSAGE[%s]", 		x[connection_message_i].data.flex->data);
+
+    ELOG(DEBUG1,"%s", buf.data);
+    MemoryContextSwitchTo(contextOld);
+}
+
+
+/*------------------------------------------------------------------------------
+ * AUDIT LOG functions
+ */
 
 /*
  * Stack functions
@@ -279,6 +811,7 @@ static bool statementLogged = false;
  * Audit events can go down to multiple levels so a stack is maintained to keep
  * track of them.
  */
+
 
 /*
  * Respond to callbacks registered with MemoryContextRegisterResetCallback().
@@ -291,6 +824,7 @@ stack_free(void *stackFree)
 {
     AuditEventStackItem *nextItem = auditEventStack;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Only process if the stack contains items */
     while (nextItem != NULL)
     {
@@ -327,6 +861,7 @@ stack_free(void *stackFree)
 
         nextItem = nextItem->next;
     }
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
@@ -340,6 +875,7 @@ stack_push()
     MemoryContext contextOld;
     AuditEventStackItem *stackItem;
 
+PGA_FUNCTION_TRACE("IN-");
     /*
      * Create a new memory context to contain the stack item.  This will be
      * free'd on stack_pop, or by our callback when the parent context is
@@ -378,6 +914,7 @@ stack_push()
 
     MemoryContextSwitchTo(contextOld);
 
+PGA_FUNCTION_TRACE("OUT");
     return stackItem;
 }
 
@@ -388,12 +925,14 @@ stack_push()
 static void
 stack_pop(int64 stackId)
 {
+PGA_FUNCTION_TRACE("IN-");
     /* Make sure what we want to delete is at the top of the stack */
     if (auditEventStack != NULL && auditEventStack->stackId == stackId)
         MemoryContextDelete(auditEventStack->contextAudit);
     else
-        elog(ERROR, "pgaudit stack item " INT64_FORMAT " not found on top - cannot pop",
+        ELOG(ERROR, "pgaudit stack item " INT64_FORMAT " not found on top - cannot pop",
              stackId);
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
@@ -411,7 +950,7 @@ stack_valid(int64 stackId)
 
     /* If we didn't find it, something went wrong. */
     if (nextItem == NULL)
-        elog(ERROR, "pgaudit stack item " INT64_FORMAT
+        ELOG(ERROR, "pgaudit stack item " INT64_FORMAT
              " not found - top of stack is " INT64_FORMAT "",
              stackId,
              auditEventStack == NULL ? (int64) -1 : auditEventStack->stackId);
@@ -465,15 +1004,18 @@ append_valid_csv(StringInfoData *buffer, const char *appendStr)
  * right on the object.
  *
  * This will need to be updated if new kinds of GRANTs are added.
+ *
+ * log_audit_event()
+ *   -> pgaudit_classifyStatement()
+ *   -> pgaudit_setStatemetIds()
+ *   -> pgaudit_getStatementDetail()
  */
 static void
-log_audit_event(AuditEventStackItem *stackItem)
+pgaudit_classifyStatement(	AuditEventStackItem *stackItem, 
+            				int *class,
+            				const char **className )
 {
-    /* By default, put everything in the MISC class. */
-    int class = LOG_MISC;
-    const char *className = CLASS_MISC;
-    MemoryContext contextOld;
-    StringInfoData auditStr;
+	PGA_FUNCTION_TRACE("IN-");
 
     /* If this event has already been logged don't log it again */
     if (stackItem->auditEvent.logged)
@@ -484,15 +1026,15 @@ log_audit_event(AuditEventStackItem *stackItem)
     {
             /* All mods go in WRITE class, except EXECUTE */
         case LOGSTMT_MOD:
-            className = CLASS_WRITE;
-            class = LOG_WRITE;
+            *className = CLASS_WRITE;
+            *class = LOG_WRITE;
 
             switch (stackItem->auditEvent.commandTag)
             {
                     /* Currently, only EXECUTE is different */
                 case T_ExecuteStmt:
-                    className = CLASS_MISC;
-                    class = LOG_MISC;
+                    *className = CLASS_MISC;
+                    *class = LOG_MISC;
                     break;
                 default:
                     break;
@@ -501,8 +1043,8 @@ log_audit_event(AuditEventStackItem *stackItem)
 
             /* These are DDL, unless they are ROLE */
         case LOGSTMT_DDL:
-            className = CLASS_DDL;
-            class = LOG_DDL;
+            *className = CLASS_DDL;
+            *class = LOG_DDL;
 
             /* Identify role statements */
             switch (stackItem->auditEvent.commandTag)
@@ -561,8 +1103,8 @@ log_audit_event(AuditEventStackItem *stackItem)
                 case T_DropRoleStmt:
                 case T_AlterRoleSetStmt:
                 case T_AlterDefaultPrivilegesStmt:
-                    className = CLASS_ROLE;
-                    class = LOG_ROLE;
+                    *className = CLASS_ROLE;
+                    *class = LOG_ROLE;
                     break;
 
                     /*
@@ -577,8 +1119,8 @@ log_audit_event(AuditEventStackItem *stackItem)
                         pg_strcasecmp(stackItem->auditEvent.command,
                                       COMMAND_DROP_ROLE) == 0)
                     {
-                        className = CLASS_ROLE;
-                        class = LOG_ROLE;
+                        *className = CLASS_ROLE;
+                        *class = LOG_ROLE;
                     }
                     break;
 
@@ -596,14 +1138,14 @@ log_audit_event(AuditEventStackItem *stackItem)
                 case T_SelectStmt:
                 case T_PrepareStmt:
                 case T_PlannedStmt:
-                    className = CLASS_READ;
-                    class = LOG_READ;
+                    *className = CLASS_READ;
+                    *class = LOG_READ;
                     break;
 
                     /* FUNCTION statements */
                 case T_DoStmt:
-                    className = CLASS_FUNCTION;
-                    class = LOG_FUNCTION;
+                    *className = CLASS_FUNCTION;
+                    *class = LOG_FUNCTION;
                     break;
 
                 default:
@@ -614,25 +1156,13 @@ log_audit_event(AuditEventStackItem *stackItem)
         case LOGSTMT_NONE:
             break;
     }
+PGA_FUNCTION_TRACE("OUT");
+}
 
-    /*----------
-     * Only log the statement if:
-     *
-     * 1. If object was selected for audit logging (granted), or
-     * 2. The statement belongs to a class that is being logged
-     *
-     * If neither of these is true, return.
-     *----------
-     */
-    if (!stackItem->auditEvent.granted && !(auditLogBitmap & class))
-        return;
-
-    /*
-     * Use audit memory context in case something is not free'd while
-     * appending strings and parameters.
-     */
-    contextOld = MemoryContextSwitchTo(stackItem->contextAudit);
-
+static void
+pgaudit_setStatemetIds(AuditEventStackItem *stackItem)
+{
+PGA_FUNCTION_TRACE("IN-");
     /* Set statement and substatement IDs */
     if (stackItem->auditEvent.statementId == 0)
     {
@@ -646,31 +1176,20 @@ log_audit_event(AuditEventStackItem *stackItem)
         stackItem->auditEvent.statementId = statementTotal;
         stackItem->auditEvent.substatementId = ++substatementTotal;
     }
+PGA_FUNCTION_TRACE("OUT");
+}
 
-    /*
-     * Create the audit substring
-     *
-     * The type-of-audit-log and statement/substatement ID are handled below,
-     * this string is everything else.
-     */
-    initStringInfo(&auditStr);
-    append_valid_csv(&auditStr, stackItem->auditEvent.command);
-
-    appendStringInfoCharMacro(&auditStr, ',');
-    append_valid_csv(&auditStr, stackItem->auditEvent.objectType);
-
-    appendStringInfoCharMacro(&auditStr, ',');
-    append_valid_csv(&auditStr, stackItem->auditEvent.objectName);
-
+static void
+pgaudit_getStatementDetail(AuditEventStackItem *stackItem, StringInfoData auditStr)
+{
+PGA_FUNCTION_TRACE("IN-");
     /*
      * If auditLogStatmentOnce is true, then only log the statement and
      * parameters if they have not already been logged for this substatement.
      */
-    appendStringInfoCharMacro(&auditStr, ',');
     if (!stackItem->auditEvent.statementLogged || !auditLogStatementOnce)
     {
         append_valid_csv(&auditStr, stackItem->auditEvent.commandText);
-
         appendStringInfoCharMacro(&auditStr, ',');
 
         /* Handle parameter logging, if enabled. */
@@ -679,6 +1198,7 @@ log_audit_event(AuditEventStackItem *stackItem)
             int paramIdx;
             int numParams;
             StringInfoData paramStrResult;
+
             ParamListInfo paramList = stackItem->auditEvent.paramList;
 
             numParams = paramList == NULL ? 0 : paramList->numParams;
@@ -697,7 +1217,7 @@ log_audit_event(AuditEventStackItem *stackItem)
 
                 /* Add a comma for each param */
                 if (paramIdx != 0)
-                    appendStringInfoCharMacro(&paramStrResult, ',');
+                    appendStringInfoCharMacro(&paramStrResult, ' ');
 
                 /* Skip if null or if oid is invalid */
                 if (prm->isnull || !OidIsValid(prm->ptype))
@@ -712,39 +1232,231 @@ log_audit_event(AuditEventStackItem *stackItem)
             }
 
             if (numParams == 0)
+            {
                 appendStringInfoString(&auditStr, "<none>");
+            	pgaudit_setTextToField(command_parameter_i, NULL, true);
+            }
             else
-                append_valid_csv(&auditStr, paramStrResult.data);
+        	{
+        		append_valid_csv(&auditStr, paramStrResult.data);
+            	pgaudit_setTextToField(	command_parameter_i, 
+            							paramStrResult.data, 
+            							true);
+        	}
         }
         else
-            appendStringInfoString(&auditStr, "<not logged>");
-
-        stackItem->auditEvent.statementLogged = true;
+    	{
+    		appendStringInfoString(&auditStr, "<not logged>");
+            pgaudit_setTextToField(command_parameter_i, NULL, true);
+    	}
+    
+    	stackItem->auditEvent.statementLogged = true;
+    
     }
     else
         /* we were asked to not log it */
         appendStringInfoString(&auditStr,
                                "<previously logged>,<previously logged>");
+PGA_FUNCTION_TRACE("OUT");
+}
+
+static void
+log_audit_event(AuditEventStackItem *stackItem)
+{
+    /* By default, put everything in the MISC class. */
+    int class = LOG_MISC;
+    const char *className = CLASS_MISC;
+    MemoryContext contextOld;
+    StringInfoData auditStr;
+    
+PGA_FUNCTION_TRACE("IN-");
+    pgaudit_classifyStatement(stackItem, &class, &className );
+
+    /*
+     * This code was ommited for collect data for SESSON-AUDIT-LOGGING.
+     * ----------
+     * Only log the statement if:
+     *
+     * 1. If object was selected for audit logging (granted), or
+     * 2. The statement belongs to a class that is being logged
+     *
+     * If neither of these is true, return. --> Continue !
+     *----------
+     *    if (!stackItem->auditEvent.granted && !(auditLogBitmap & class))
+     *        return;
+     *----------
+     */
+
+
+    /* Set statement and substatement IDs */
+    pgaudit_setStatemetIds(stackItem);
+
+    /*
+     * Use audit memory context in case something is not free'd while
+     * appending strings and parameters.
+     */
+    contextOld = MemoryContextSwitchTo(stackItem->contextAudit);
+
+    /*
+     * Create the audit substring
+     *
+     * The type-of-audit-log and statement/substatement ID are handled below,
+     * this string is everything else.
+     */
+    initStringInfo(&auditStr);
+    append_valid_csv(&auditStr, stackItem->auditEvent.command);
+
+    appendStringInfoCharMacro(&auditStr, ',');
+    append_valid_csv(&auditStr, stackItem->auditEvent.objectType);
+
+    appendStringInfoCharMacro(&auditStr, ',');
+    append_valid_csv(&auditStr, stackItem->auditEvent.objectName);
+
+#ifdef BUG310_20160126 /* Trial,Delete: BUG#310 */
+    /* Collect Classes by the Name */
+    if( !keptDMLLogData )
+    {
+        pgaudit_setTextToField(	class_i, (char *)className, true);
+        pgaudit_setTextToField(	command_tag_i, 
+            					(char *)stackItem->auditEvent.command, 
+            					true);
+    }
+    
+    pgaudit_setTextToField(	object_type_i, 
+            				(char *)(stackItem->auditEvent.objectType), 
+            				true);
+    pgaudit_setTextToField(	object_id_i, 
+            				stackItem->auditEvent.objectName, 
+            				true);
+    pgaudit_setTextToField(	current_user_i, 
+            				GetUserNameFromId(GetUserId(),false),
+            				true);
+    pgaudit_setTimestamps();
+#endif
+    
+    /*
+     * If auditLogStatmentOnce is true, then only log the statement and
+     * parameters if they have not already been logged for this substatement.
+     */
+    appendStringInfoCharMacro(&auditStr, ',');
+    pgaudit_getStatementDetail(stackItem, auditStr);
 
     /*
      * Log the audit entry.  Note: use of INT64_FORMAT here is bad for
      * translatability, but we currently haven't got translation support in
      * pgaudit anyway.
      */
-    ereport(auditLogLevel,
-            (errmsg("AUDIT: %s," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
-                    stackItem->auditEvent.granted ?
-                    AUDIT_TYPE_OBJECT : AUDIT_TYPE_SESSION,
-                    stackItem->auditEvent.statementId,
-                    stackItem->auditEvent.substatementId,
-                    className,
-                    auditStr.data),
-                    errhidestmt(true),
-                    errhidecontext(true)));
+    if ( stackItem->auditEvent.granted )
+    {
+        /* use satack context (stackItem->contextAuditi) */
+        StringInfoData objectLogMessage;
+
+        initStringInfo(&objectLogMessage);
+        appendStringInfo(&objectLogMessage, 
+            "AUDIT: %s," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
+            AUDIT_TYPE_OBJECT,
+            stackItem->auditEvent.statementId,
+            stackItem->auditEvent.substatementId,
+            className,
+            auditStr.data);
+
+        /* 
+         * output to the logger, serverlog or syslog 
+         */
+        pgaudit_doOutput(objectLogMessage.data);
+    }
+    else
+    {
+#ifndef BUG310_20160126 /* Trial,Insert : BUG#310 & 316 */
+        /* Collect Classes by the Name */
+        if( !keptDMLLogData )
+        {
+            pgaudit_setTextToField(	class_i, (char *)className, true);
+            pgaudit_setTextToField(	command_tag_i, 
+            						(char *)stackItem->auditEvent.command, 
+            						true);
+            pgaudit_setTextToField(	object_type_i, 
+            						(char *)(stackItem->auditEvent.objectType), 
+            						true);
+            pgaudit_setTextToField(	object_id_i, 
+            						stackItem->auditEvent.objectName, 
+            						true);
+        }
+    
+        pgaudit_setTextToField(	command_text_i, 
+            					(char *)stackItem->auditEvent.commandText, 
+            					true);
+        pgaudit_setTextToField(	current_user_i, 
+            					GetUserNameFromId(GetUserId(),false),
+            					true);
+        pgaudit_setTimestamps();
+#endif
+        set_statement_id();
+        set_substatement_id();
+        set_command_result(0);
+        
+        pgaudit_executeRules();
+        pgaudit_printData4debug();
+    }
 
     stackItem->auditEvent.logged = true;
 
     MemoryContextSwitchTo(contextOld);
+    
+PGA_FUNCTION_TRACE("OUT");
+}
+
+/*
+ * Classify Object
+ */
+static void
+pgaudit_classifyObject(AuditEventStackItem *stackItem)
+{
+    /* By default, put everything in the MISC class. */
+    int class = LOG_MISC;
+    const char *className = CLASS_MISC;
+    MemoryContext contextOld;
+    StringInfoData auditStr;
+
+PGA_FUNCTION_TRACE("IN-");
+    pgaudit_classifyStatement(stackItem, &class, &className );
+
+    /* Set statement and substatement IDs */
+    pgaudit_setStatemetIds(stackItem);
+
+    /* cllect data for SESSION-AUDIT-LOGGING.  */
+    pgaudit_setTextToField(	object_type_i, 
+            			   	(char*)stackItem->auditEvent.objectType, 
+            				false);
+    pgaudit_setTextToField(	object_id_i, 
+            				(char*)stackItem->auditEvent.objectName, 
+            				false);
+    pgaudit_setTextToField(	command_tag_i, 
+            				(char*)stackItem->auditEvent.command, 
+            				false);
+    pgaudit_setTextToField(	class_i, (char*)className, false);
+    pgaudit_setTextToField(	current_user_i, 
+            				GetUserNameFromId(GetUserId(),false),
+            				true);
+    keptDMLLogData = true;
+
+    /*
+     * Use audit memory context in case something is not free'd while
+     * appending strings and parameters.
+     */
+    contextOld = MemoryContextSwitchTo(stackItem->contextAudit);
+    
+    /*
+     * If auditLogStatmentOnce is true, then only log the statement and
+     * parameters if they have not already been logged for this substatement.
+     */
+    initStringInfo(&auditStr);
+    pgaudit_getStatementDetail(stackItem, auditStr);
+
+    stackItem->auditEvent.logged = true;
+
+    MemoryContextSwitchTo(contextOld);
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
@@ -763,6 +1475,7 @@ audit_on_acl(Datum aclDatum,
     int aclIndex;
     int aclTotal;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Detoast column's ACL if necessary */
     acl = DatumGetAclP(aclDatum);
 
@@ -819,6 +1532,7 @@ audit_on_acl(Datum aclDatum,
         pfree(acl);
 
     return result;
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
@@ -834,6 +1548,7 @@ audit_on_relation(Oid relOid,
     Datum aclDatum;
     bool isNull;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Get relation tuple from pg_class */
     tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relOid));
     if (!HeapTupleIsValid(tuple))
@@ -850,6 +1565,7 @@ audit_on_relation(Oid relOid,
     /* Free the relation tuple */
     ReleaseSysCache(tuple);
 
+PGA_FUNCTION_TRACE("OUT");
     return result;
 }
 
@@ -867,6 +1583,7 @@ audit_on_attribute(Oid relOid,
     Datum aclDatum;
     bool isNull;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Get the attribute's ACL */
     attTuple = SearchSysCache2(ATTNUM,
                                ObjectIdGetDatum(relOid),
@@ -887,6 +1604,7 @@ audit_on_attribute(Oid relOid,
     /* Free attribute */
     ReleaseSysCache(attTuple);
 
+PGA_FUNCTION_TRACE("OUT");
     return result;
 }
 
@@ -905,6 +1623,7 @@ audit_on_any_attribute(Oid relOid,
     AttrNumber col;
     Bitmapset *tmpSet;
 
+PGA_FUNCTION_TRACE("IN-");
     /* If bms is empty then check for any column match */
     if (bms_is_empty(attributeSet))
     {
@@ -945,6 +1664,7 @@ audit_on_any_attribute(Oid relOid,
 
     bms_free(tmpSet);
 
+PGA_FUNCTION_TRACE("OUT");
     return result;
 }
 
@@ -958,6 +1678,7 @@ log_select_dml(Oid auditOid, List *rangeTabls)
     bool first = true;
     bool found = false;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Do not log if this is an internal statement */
     if (internalStatement)
         return;
@@ -1006,13 +1727,10 @@ log_select_dml(Oid auditOid, List *rangeTabls)
          * If this is the first RTE then session log unless auditLogRelation
          * is set.
          */
-        if (first && !auditLogRelation)
-        {
+    
+     	if (first && utilityStatement && !executorStart)
             log_audit_event(auditEventStack);
-
-            first = false;
-        }
-
+    
         /*
          * We don't have access to the parsetree here, so we have to generate
          * the node type, object type, and command tag by decoding
@@ -1095,6 +1813,14 @@ log_select_dml(Oid auditOid, List *rangeTabls)
                                            RelationGetNamespace(rel)),
                                        RelationGetRelationName(rel));
         relation_close(rel, NoLock);
+ 
+
+    	/* 20151218 ...... anyway, collect event items again */
+     	if (first && utilityStatement && !executorStart)
+        {
+            log_audit_event(auditEventStack);
+            first = false;
+        }
 
         /* Perform object auditing only if the audit role is valid */
         if (auditOid != InvalidOid)
@@ -1153,14 +1879,8 @@ log_select_dml(Oid auditOid, List *rangeTabls)
             auditEventStack->auditEvent.logged = false;
             log_audit_event(auditEventStack);
         }
-
-        /* Do relation level logging if auditLogRelation is set */
-        if (auditLogRelation)
-        {
-            auditEventStack->auditEvent.logged = false;
-            auditEventStack->auditEvent.granted = false;
-            log_audit_event(auditEventStack);
-        }
+    
+    	pgaudit_classifyObject(auditEventStack);
 
         pfree(auditEventStack->auditEvent.objectName);
     }
@@ -1168,7 +1888,7 @@ log_select_dml(Oid auditOid, List *rangeTabls)
     /*
      * If no tables were found that means that RangeTbls was empty or all
      * relations were in the system schema.  In that case still log a session
-     * record.
+     * record. Function call is one of that case also.
      */
     if (!found)
     {
@@ -1177,6 +1897,7 @@ log_select_dml(Oid auditOid, List *rangeTabls)
 
         log_audit_event(auditEventStack);
     }
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
@@ -1190,11 +1911,12 @@ log_function_execute(Oid objectId)
     Form_pg_proc proc;
     AuditEventStackItem *stackItem;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Get info about the function. */
     proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(objectId));
 
     if (!proctup)
-        elog(ERROR, "cache lookup failed for function %u", objectId);
+        ELOG(ERROR, "cache lookup failed for function %u", objectId);
 
     proc = (Form_pg_proc) GETSTRUCT(proctup);
 
@@ -1228,15 +1950,19 @@ log_function_execute(Oid objectId)
 
     /* Pop audit event from the stack */
     stack_pop(stackItem->stackId);
+PGA_FUNCTION_TRACE("OUT");
 }
 
-/*
+/*-----------------------------------------------------------------------------
  * Hook functions
  */
 static ExecutorCheckPerms_hook_type next_ExecutorCheckPerms_hook = NULL;
 static ProcessUtility_hook_type next_ProcessUtility_hook = NULL;
 static object_access_hook_type next_object_access_hook = NULL;
 static ExecutorStart_hook_type next_ExecutorStart_hook = NULL;
+static emit_log_hook_type next_emit_log_hook = NULL;
+static ExecutorEnd_hook_type next_ExecutorEnd_hook = NULL;
+static ClientAuthentication_hook_type next_ClientAuthentication_hook = NULL;
 
 /*
  * Hook ExecutorStart to get the query text and basic command type for queries
@@ -1247,7 +1973,19 @@ static void
 pgaudit_ExecutorStart_hook(QueryDesc *queryDesc, int eflags)
 {
     AuditEventStackItem *stackItem = NULL;
+    executorStart = true;
 
+PGA_FUNCTION_TRACE("IN-");
+    /* Clear the item logging fields */
+    pgaudit_initItems(false);
+
+    /* Set application_name, command_text, and virtual_x_id */
+    pgaudit_setTextToField(	application_name_i, application_name, true);
+    pgaudit_setTextToField(	command_text_i, 
+            				(char *)(queryDesc->sourceText), 
+            				true);
+    set_virtual_x_id();
+    
     if (!internalStatement)
     {
         /* Push the audit even onto the stack */
@@ -1308,29 +2046,37 @@ pgaudit_ExecutorStart_hook(QueryDesc *queryDesc, int eflags)
     if (stackItem)
         MemoryContextSetParent(stackItem->contextAudit,
                                queryDesc->estate->es_query_cxt);
+    
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
  * Hook ExecutorCheckPerms to do session and object auditing for DML.
  */
 static bool
-pgaudit_ExecutorCheckPerms_hook(List *rangeTabls, bool abort)
+pgaudit_ExecutorCheckPerms_hook(List *rangeTabls, bool Aabort)
 {
     Oid auditOid;
 
+PGA_FUNCTION_TRACE("IN-");
     /* Get the audit oid if the role exists */
     auditOid = get_role_oid(auditRole, true);
 
-    /* Log DML if the audit role is valid or session logging is enabled */
-    if ((auditOid != InvalidOid || auditLogBitmap != 0) &&
-        !IsAbortedTransactionBlockState())
+    /*
+     * This code was ommited for collect data for SESSON-AUDIT-LOGGING.
+     * Log DML if the audit role is valid or session logging is enabled
+     *   if ((auditOid != InvalidOid || auditLogBitmap != 0) &&
+     */
+
+    if (!IsAbortedTransactionBlockState())
         log_select_dml(auditOid, rangeTabls);
 
     /* Call the next hook function */
     if (next_ExecutorCheckPerms_hook &&
-        !(*next_ExecutorCheckPerms_hook) (rangeTabls, abort))
+        !(*next_ExecutorCheckPerms_hook) (rangeTabls, Aabort))
         return false;
 
+PGA_FUNCTION_TRACE("OUT");
     return true;
 }
 
@@ -1347,6 +2093,10 @@ pgaudit_ProcessUtility_hook(Node *parsetree,
 {
     AuditEventStackItem *stackItem = NULL;
     int64 stackId = 0;
+    
+PGA_FUNCTION_TRACE("IN-");
+    /* Clear the item logging fields */
+    pgaudit_initItems(false);
 
     /*
      * Don't audit substatements.  All the substatements we care about should
@@ -1358,7 +2108,7 @@ pgaudit_ProcessUtility_hook(Node *parsetree,
         if (context == PROCESS_UTILITY_TOPLEVEL)
         {
             if (auditEventStack != NULL)
-                elog(ERROR, "pgaudit stack is not empty");
+                ELOG(ERROR, "pgaudit stack is not empty");
 
             stackItem = stack_push();
             stackItem->auditEvent.paramList = params;
@@ -1375,20 +2125,33 @@ pgaudit_ProcessUtility_hook(Node *parsetree,
         /*
          * If this is a DO block log it before calling the next ProcessUtility
          * hook.
+         *
+         * auditLogBitmap control was ommitd. 2015.03
          */
-        if (auditLogBitmap & LOG_FUNCTION &&
-            stackItem->auditEvent.commandTag == T_DoStmt &&
-            !IsAbortedTransactionBlockState())
+          if ( stackItem->auditEvent.commandTag == T_DoStmt 
+            && !IsAbortedTransactionBlockState())
+          {
+            pgaudit_setTextToField(application_name_i, application_name, true);
+            pgaudit_setTextToField(command_text_i, (char *)queryString, true);
+            set_virtual_x_id();
+          
             log_audit_event(stackItem);
+          }
     }
 
     /* Call the standard process utility chain. */
+    pgaudit_setTextToField(application_name_i, application_name, true);
+    pgaudit_setTextToField(command_text_i, (char *)queryString, true);
+    set_virtual_x_id();
+
+   	utilityStatement = true;
     if (next_ProcessUtility_hook)
         (*next_ProcessUtility_hook) (parsetree, queryString, context,
                                      params, dest, completionTag);
     else
         standard_ProcessUtility(parsetree, queryString, context,
                                 params, dest, completionTag);
+   	utilityStatement = false;
 
     /*
      * Process the audit event if there is one.  Also check that this event
@@ -1407,10 +2170,25 @@ pgaudit_ProcessUtility_hook(Node *parsetree,
          * Log the utility command if logging is on, the command has not
          * already been logged by another hook, and the transaction is not
          * aborted.
+         *
+         * if (auditLogBitmap != 0 )
          */
-        if (auditLogBitmap != 0 && !stackItem->auditEvent.logged)
+    	if (!stackItem->auditEvent.logged)
+    	{
+            pgaudit_setTextToField(application_name_i, application_name, true);
+    		set_virtual_x_id();
+            pgaudit_setTextToField( command_text_i, 
+            						(char *)stackItem->auditEvent.commandText, 
+            						true);
+            pgaudit_setTextToField(connection_message_i, NULL, true);
+    
             log_audit_event(stackItem);
+    	}
     }
+    
+   	keptDMLLogData = false;
+    
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
@@ -1424,15 +2202,333 @@ pgaudit_object_access_hook(ObjectAccessType access,
                             int subId,
                             void *arg)
 {
-    if (auditLogBitmap & LOG_FUNCTION && access == OAT_FUNCTION_EXECUTE &&
+PGA_FUNCTION_TRACE("IN-");
+    /*
+     * This code was ommited for collect data for SESSON-AUDIT-LOGGING.
+     * if (auditLogBitmap & LOG_FUNCTION && access == OAT_FUNCTION_EXECUTE &&
+     */
+
+    if (access == OAT_FUNCTION_EXECUTE &&
         auditEventStack && !IsAbortedTransactionBlockState())
         log_function_execute(objectId);
 
     if (next_object_access_hook)
         (*next_object_access_hook) (access, classId, objectId, subId, arg);
+PGA_FUNCTION_TRACE("OUT");
 }
 
 /*
+ * Hook pgaudit_ExecutorEnd_hook to provide DML Logs. 
+ */
+static void
+pgaudit_ExecutorEnd_hook(QueryDesc *queryDesc)
+{
+PGA_FUNCTION_TRACE("IN-");
+    if( keptDMLLogData )
+    {
+        /* stop the call */
+        keptDMLLogData = false;
+
+        pgaudit_setTimestamps();
+        set_statement_id();
+        set_substatement_id();
+        set_command_result(0);
+
+        pgaudit_executeRules();
+        pgaudit_printData4debug();
+    }
+    
+    executorStart = false;
+    
+    /* Call the previous hook or standard function */
+    if (next_ExecutorEnd_hook)
+        (*next_ExecutorEnd_hook) (queryDesc);
+    else
+        standard_ExecutorEnd(queryDesc);
+PGA_FUNCTION_TRACE("OUT");
+isStartTrace=true;
+}
+
+/* 2016.03
+ * pgaudit_emit_log_hook()
+ *   -> pgaudit_emit_log_hook_body()
+ *     -> pgaudit_extractRemort()
+ *
+ * CONNECTION class Logging
+ *   Log startup of database system, connection, buckup, and errors.
+ */
+
+static void 
+pgaudit_extractRemort(char *message)
+{
+    char *remoteHost=pgauditDataIndexes[remote_host_i].data.fix;
+    char *remotePort=pgauditDataIndexes[remote_port_i].data.fix;
+    int i=0, j=0;
+    /*
+     * This codes depend on the format of the message.
+     *
+     * This exrract remote host & port names by the letter '=' and ' '
+     * 		<"host" in any locale>'='<hostmene>' '
+     * 		<"port" in any locale>'='<portmene>' '
+     * And, any other character is not acceptable between the '=' and 
+     * the names.
+     * The blanck after name may be a NULL('\0').
+     *
+     * (The code to extract might be a function separated.)
+     */
+
+    /* extract remote Host */
+    j = 0;
+    while( (message[i] != '=') && (message[i] != '\0') )
+        i++;
+    if( message[i] == '=' )
+    {
+        i++;
+        remoteHost[j++] = ' ';
+        while( (message[i] != ' ') && (message[i] != '\0') && (j <= 256) )
+            remoteHost[j++] = message[i++];
+        remoteHost[j++] = ' ';
+        remoteHost[j++] = '\0';
+    }
+    else
+        strcpy(remoteHost, pgauditNullString);
+
+    /* extract remote Port */
+    j = 0;
+    while( (message[i] != '=') && (message[i] != '\0') )
+        i++;
+    if( message[i] == '=' )
+    {
+        i++;
+        remotePort[j++] = ' ';
+        while( (message[i] != ' ') && (message[i] != '\0')  && (j <= 6) )
+            remotePort[j++] = message[i++];
+        remotePort[j++] = ' ';
+        remotePort[j++] = '\0';
+    }
+    else
+        strcpy(remotePort, pgauditNullString);
+}
+static void
+pgaudit_emit_log_hook_body(ErrorData *edata)
+{
+    bool isConnect = false;
+    /*
+     *	CONNECTION class Logging
+     *
+     *  read an event from the message, and then outputs a SESSION-AUDIT-LOG.
+     */
+
+    ELOG(DEBUG3, "%s:edata->messag=[%s]", __func__, edata->message);
+    /* connection received */
+    if( strstr(edata->message, Msg_Connection1))
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_CONNECT, true);
+        pgaudit_setTextToField(connection_message_i, MESSAGE_RECEIVED, true);
+        pgaudit_extractRemort(edata->message);
+
+        /* recover output_to_server to original GUC value */
+     	edata->output_to_server = saveLogConnections;
+    }
+
+    /* connection authorized */
+    else if( strstr(edata->message, Msg_Connection2) )
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_CONNECT, true);
+        pgaudit_setTextToField(connection_message_i, MESSAGE_AUTHORIZED, true);
+        isConnect = true;
+        
+        /* recover output_to_server to original GUC value */
+        edata->output_to_server = saveLogConnections;
+    }
+
+    /* disconnection */
+    else if( 	strstr(edata->message, Msg_DisConnect) )
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_CONNECT, true);
+        pgaudit_setTextToField(connection_message_i, MESSAGE_DISCONNECTED, true);
+        pgaudit_setTextToField(current_user_i, NULL, true);
+        
+        /* recover output_to_server to original GUC value */
+        edata->output_to_server = saveLogDisconnections;
+    }
+
+    /* database system was shut down at */
+    else if ( 	strstr(edata->message, Msg_ShutDown1) 
+        || 	  	strstr(edata->message, Msg_ShutDown2) )
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_SYSTEM, true);
+        pgaudit_setTextToField(connection_message_i, MESSAGE_NORMALENDED, true);
+    }
+
+    /* database system was interrupted ... */
+    else if ( 	strstr(edata->message, Msg_Interrupt1) 
+        || 		strstr(edata->message, Msg_Interrrupt2) 
+        || 		strstr(edata->message, Msg_Interrrupt3) )
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_SYSTEM, true);
+        pgaudit_setTextToField(connection_message_i, MESSAGE_INTERRUPTED, true);
+    }
+
+    /* database system is ready to accept connections */
+    else if( 	strstr(edata->message, Msg_Redy))
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_SYSTEM, true);
+        pgaudit_setTextToField(connection_message_i, MESSAGE_READY, true);
+    }
+
+    /* received replication command */
+    else if( 	strstr(edata->message, Msg_Replication))
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_BACKUP, true);
+        pgaudit_setTextToField(application_name_i, application_name, true);
+    }
+    
+    /* selected new timeline */
+    else if( 	strstr(edata->message, Msg_NewTimeline))
+    {
+        pgaudit_initItems(true);
+        pgaudit_setTextToField(class_i, COMMAND_SYSTEM, true);
+        pgaudit_setTextToField(connection_message_i, edata->message, true); 
+    }
+
+    /* paramater Log_connections changed */
+    else if ( strstr(edata->message, Msg_PC_LC))
+    {
+    	saveLogConnections = Log_connections;
+    	Log_connections = true;
+        return;
+    }
+
+    /* paramater Log_disconnections changed */
+    else if ( strstr(edata->message, Msg_PC_LD))
+    {
+    	saveLogDisconnections = Log_disconnections;
+    	Log_disconnections = true;
+    ELOG(WARNING,"Log_disconnections=[%d],saveLogDisconnections=[%d]",Log_disconnections,saveLogDisconnections);
+        return;
+    }
+
+    /* paramater log_replication_commands changed */
+    else if ( strstr(edata->message, Msg_PC_RP))
+    {
+    	saveLogReplicationCommands = log_replication_commands;
+    	log_replication_commands = true;
+    ELOG(WARNING,"Log_disconnections=[%d],saveLogReplicationCommands=[%d]",log_replication_commands,saveLogReplicationCommands);
+        return;
+    }
+
+    /* SQL Error */ 
+    else if( 	strncmp(unpack_sql_state(edata->sqlerrcode),"00",2) )
+    {
+        ELOG(DEBUG3, "unpack_sql_state(edata->sqlerrcode)=%s",
+            unpack_sql_state(edata->sqlerrcode));
+
+        if (keptDMLLogData) 
+        {
+            /* 
+             * In order to avoid the confusion of a complex statement (COPY or
+             *  something else), clears the data item of object ID, and type.
+             */
+            pgaudit_setTextToField(object_id_i, NULL, true);
+            pgaudit_setTextToField(object_type_i, NULL, true);
+
+            /* Use current statement id. (already count uped) */
+            set_statement_id();
+            set_substatement_id();
+        }
+        else
+        {
+            /*
+             *  No data has kept for current statement. 
+             *  May be a pase error or anything else.
+             */
+            pgaudit_initItems(false);
+            set_virtual_x_id();
+
+            /* Count up the statement id. */
+            statementTotal++;
+            set_statement_id();
+            pgaudit_setTextToField(sub_statement_id_i, "1", true);
+        }
+        set_command_result( edata->sqlerrcode );
+        pgaudit_setTextToField(class_i, "ERROR", true);
+        pgaudit_setTextToField(command_text_i, (char*)debug_query_string, true);
+    }
+    
+    else
+        return;
+
+    pgaudit_setTextToField(application_name_i, application_name, true);
+    set_process_id();				/* pid_i */
+    set_remote_host();				/* remote_host_i*/
+    set_remote_port();				/* remote_port_i*/
+    set_database_name();			/* database_i */
+    set_session_user_name();		/* user_i */
+    set_virtual_x_id();				/* virtual_xid_i */
+    pgaudit_setTimestamps();		/* timestamp_i */
+
+    /* output SESSION-AUDIT-LOG */
+    pgaudit_executeRules();
+    pgaudit_printData4debug();
+
+    /*
+ 	 * set interim current user name.
+ 	 * This may appier in the ERROR class adit logs before any SQL is executed.
+ 	 */
+    if (isConnect)
+        set_interim_current_user();
+
+   	keptDMLLogData = false;
+}
+
+static void
+pgaudit_emit_log_hook(ErrorData *edata)
+{
+    /* Protect from recrcuve call, also from timing before _PG_init(). */
+    if( (edata->elevel > DEBUG1) && isPGinitDone && (!emitLogCalled) )
+    {
+        emitLogCalled++;
+PGA_FUNCTION_TRACE("IN-");
+        pgaudit_emit_log_hook_body(edata);
+PGA_FUNCTION_TRACE("OUT");
+        emitLogCalled--;
+    }
+
+    if (emitLogCalled)
+    {
+        edata->output_to_client = false;
+        edata->hide_stmt = true;
+    }
+
+    /* Call the previous hook or standard function */
+    if (next_emit_log_hook)
+        (*next_emit_log_hook) (edata);
+}
+
+
+/*
+ * pgaudit_ClientAuthentication_hook()
+ *
+ * Debug codes, to show the timming ClientAuthentication_hook called .
+ */
+static void
+pgaudit_ClientAuthentication_hook(Port * port, int status)
+{
+PGA_FUNCTION_TRACE("IN-");
+    if (next_ClientAuthentication_hook)
+        (*next_ClientAuthentication_hook) (port, status);
+PGA_FUNCTION_TRACE("OUT");
+}
+
+/*--------------------------------------------------------------------------
  * Event trigger functions
  */
 
@@ -1452,14 +2548,18 @@ pgaudit_ddl_command_end(PG_FUNCTION_ARGS)
     const char *query;
     MemoryContext contextQuery;
     MemoryContext contextOld;
-
-    /* Continue only if session DDL logging is enabled */
-    if (~auditLogBitmap & LOG_DDL && ~auditLogBitmap & LOG_ROLE)
-        PG_RETURN_NULL();
+ 
+PGA_FUNCTION_TRACE("OUT");
+    /* 
+     * This code was ommited for collect data for SESSON-AUDIT-LOGGING.
+     * Continue only if session DDL logging is enabled *
+     * if (~auditLogBitmap & LOG_DDL && ~auditLogBitmap & LOG_ROLE)
+     *   PG_RETURN_NULL();
+     */
 
     /* Be sure the module was loaded */
     if (!auditEventStack)
-        elog(ERROR, "pgaudit not loaded before call to "
+        ELOG(ERROR, "pgaudit not loaded before call to "
              "pgaudit_ddl_command_end()");
 
     /* This is an internal statement - do not log it */
@@ -1467,7 +2567,7 @@ pgaudit_ddl_command_end(PG_FUNCTION_ARGS)
 
     /* Make sure the fuction was fired as a trigger */
     if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
-        elog(ERROR, "not fired by event trigger manager");
+        ELOG(ERROR, "not fired by event trigger manager");
 
     /* Switch memory context for query */
     contextQuery = AllocSetContextCreate(
@@ -1495,13 +2595,13 @@ pgaudit_ddl_command_end(PG_FUNCTION_ARGS)
     /* Attempt to connect */
     result = SPI_connect();
     if (result < 0)
-        elog(ERROR, "pgaudit_ddl_command_end: SPI_connect returned %d",
+        ELOG(ERROR, "pgaudit_ddl_command_end: SPI_connect returned %d",
              result);
 
     /* Execute the query */
     result = SPI_execute(query, true, 0);
     if (result != SPI_OK_SELECT)
-        elog(ERROR, "pgaudit_ddl_command_end: SPI_execute returned %d",
+        ELOG(ERROR, "pgaudit_ddl_command_end: SPI_execute returned %d",
              result);
 
     /* Iterate returned rows */
@@ -1549,6 +2649,7 @@ pgaudit_ddl_command_end(PG_FUNCTION_ARGS)
     /* No longer in an internal statement */
     internalStatement = false;
 
+PGA_FUNCTION_TRACE("OUT");
     PG_RETURN_NULL();
 }
 
@@ -1565,12 +2666,16 @@ pgaudit_sql_drop(PG_FUNCTION_ARGS)
     MemoryContext contextQuery;
     MemoryContext contextOld;
 
-    if (~auditLogBitmap & LOG_DDL)
-        PG_RETURN_NULL();
+PGA_FUNCTION_TRACE("IN-");
+    /* 
+     * This code was ommited for collect data for SESSON-AUDIT-LOGGING.
+     * if (~auditLogBitmap & LOG_DDL)
+     *   PG_RETURN_NULL();
+     */
 
     /* Be sure the module was loaded */
     if (!auditEventStack)
-        elog(ERROR, "pgaudit not loaded before call to "
+        ELOG(ERROR, "pgaudit not loaded before call to "
              "pgaudit_sql_drop()");
 
     /* This is an internal statement - do not log it */
@@ -1578,7 +2683,7 @@ pgaudit_sql_drop(PG_FUNCTION_ARGS)
 
     /* Make sure the fuction was fired as a trigger */
     if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
-        elog(ERROR, "not fired by event trigger manager");
+        ELOG(ERROR, "not fired by event trigger manager");
 
     /* Switch memory context for the query */
     contextQuery = AllocSetContextCreate(
@@ -1599,13 +2704,13 @@ pgaudit_sql_drop(PG_FUNCTION_ARGS)
     /* Attempt to connect */
     result = SPI_connect();
     if (result < 0)
-        elog(ERROR, "pgaudit_ddl_drop: SPI_connect returned %d",
+        ELOG(ERROR, "pgaudit_ddl_drop: SPI_connect returned %d",
              result);
 
     /* Execute the query */
     result = SPI_execute(query, true, 0);
     if (result != SPI_OK_SELECT)
-        elog(ERROR, "pgaudit_ddl_drop: SPI_execute returned %d",
+        ELOG(ERROR, "pgaudit_ddl_drop: SPI_execute returned %d",
              result);
 
     /* Iterate returned rows */
@@ -1634,170 +2739,8 @@ pgaudit_sql_drop(PG_FUNCTION_ARGS)
     /* No longer in an internal statement */
     internalStatement = false;
 
+	PGA_FUNCTION_TRACE("OUT");
     PG_RETURN_NULL();
-}
-
-/*
- * GUC check and assign functions
- */
-
-/*
- * Take a pgaudit.log value such as "read, write, dml", verify that each of the
- * comma-separated tokens corresponds to a LogClass value, and convert them into
- * a bitmap that log_audit_event can check.
- */
-static bool
-check_pgaudit_log(char **newVal, void **extra, GucSource source)
-{
-    List *flagRawList;
-    char *rawVal;
-    ListCell *lt;
-    int *flags;
-
-    /* Make sure newval is a comma-separated list of tokens. */
-    rawVal = pstrdup(*newVal);
-    if (!SplitIdentifierString(rawVal, ',', &flagRawList))
-    {
-        GUC_check_errdetail("List syntax is invalid");
-        list_free(flagRawList);
-        pfree(rawVal);
-        return false;
-    }
-
-    /*
-     * Check that we recognise each token, and add it to the bitmap we're
-     * building up in a newly-allocated int *f.
-     */
-    if (!(flags = (int *) malloc(sizeof(int))))
-        return false;
-
-    *flags = 0;
-
-    foreach(lt, flagRawList)
-    {
-        char *token = (char *) lfirst(lt);
-        bool subtract = false;
-        int class;
-
-        /* If token is preceded by -, then the token is subtractive */
-        if (token[0] == '-')
-        {
-            token++;
-            subtract = true;
-        }
-
-        /* Test each token */
-        if (pg_strcasecmp(token, CLASS_NONE) == 0)
-            class = LOG_NONE;
-        else if (pg_strcasecmp(token, CLASS_ALL) == 0)
-            class = LOG_ALL;
-        else if (pg_strcasecmp(token, CLASS_DDL) == 0)
-            class = LOG_DDL;
-        else if (pg_strcasecmp(token, CLASS_FUNCTION) == 0)
-            class = LOG_FUNCTION;
-        else if (pg_strcasecmp(token, CLASS_MISC) == 0)
-            class = LOG_MISC;
-        else if (pg_strcasecmp(token, CLASS_READ) == 0)
-            class = LOG_READ;
-        else if (pg_strcasecmp(token, CLASS_ROLE) == 0)
-            class = LOG_ROLE;
-        else if (pg_strcasecmp(token, CLASS_WRITE) == 0)
-            class = LOG_WRITE;
-        else
-        {
-            free(flags);
-            pfree(rawVal);
-            list_free(flagRawList);
-            return false;
-        }
-
-        /* Add or subtract class bits from the log bitmap */
-        if (subtract)
-            *flags &= ~class;
-        else
-            *flags |= class;
-    }
-
-    pfree(rawVal);
-    list_free(flagRawList);
-
-    /* Store the bitmap for assign_pgaudit_log */
-    *extra = flags;
-
-    return true;
-}
-
-/*
- * Set pgaudit_log from extra (ignoring newVal, which has already been
- * converted to a bitmap above). Note that extra may not be set if the
- * assignment is to be suppressed.
- */
-static void
-assign_pgaudit_log(const char *newVal, void *extra)
-{
-    if (extra)
-        auditLogBitmap = *(int *) extra;
-}
-
-/*
- * Take a pgaudit.log_level value such as "debug" and check that is is valid.
- * Return the enum value so it does not have to be checked again in the assign
- * function.
- */
-static bool
-check_pgaudit_log_level(char **newVal, void **extra, GucSource source)
-{
-    int *logLevel;
-
-    /* Allocate memory to store the log level */
-    if (!(logLevel = (int *) malloc(sizeof(int))))
-        return false;
-
-    /* Find the log level enum */
-    if (pg_strcasecmp(*newVal, "debug") == 0)
-        *logLevel = DEBUG2;
-    else if (pg_strcasecmp(*newVal, "debug5") == 0)
-        *logLevel = DEBUG5;
-    else if (pg_strcasecmp(*newVal, "debug4") == 0)
-        *logLevel = DEBUG4;
-    else if (pg_strcasecmp(*newVal, "debug3") == 0)
-        *logLevel = DEBUG3;
-    else if (pg_strcasecmp(*newVal, "debug2") == 0)
-        *logLevel = DEBUG2;
-    else if (pg_strcasecmp(*newVal, "debug1") == 0)
-        *logLevel = DEBUG1;
-    else if (pg_strcasecmp(*newVal, "info") == 0)
-        *logLevel = INFO;
-    else if (pg_strcasecmp(*newVal, "notice") == 0)
-        *logLevel = NOTICE;
-    else if (pg_strcasecmp(*newVal, "warning") == 0)
-        *logLevel = WARNING;
-    else if (pg_strcasecmp(*newVal, "log") == 0)
-        *logLevel = LOG;
-
-    /* Error if the log level enum is not found */
-    else
-    {
-        free(logLevel);
-        return false;
-    }
-
-    /* Return the log level enum */
-    *extra = logLevel;
-
-    return true;
-}
-
-/*
- * Set pgaudit_log from extra (ignoring newVal, which has already been
- * converted to an enum above). Note that extra may not be set if the
- * assignment is to be suppressed.
- */
-static void
-assign_pgaudit_log_level(const char *newVal, void *extra)
-{
-    if (extra)
-        auditLogLevel = *(int *) extra;
 }
 
 /*
@@ -1806,6 +2749,8 @@ assign_pgaudit_log_level(const char *newVal, void *extra)
 void
 _PG_init(void)
 {
+    MemoryContext contextOld;
+
     /* Be sure we do initialization only once */
     static bool inited = false;
 
@@ -1817,124 +2762,16 @@ _PG_init(void)
         ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
 
-    /* Define pgaudit.log */
+    /* Define pgaudit.config_file */
     DefineCustomStringVariable(
-        "pgaudit.log",
-
-        "Specifies which classes of statements will be logged by session audit "
-        "logging. Multiple classes can be provided using a comma-separated "
-        "list and classes can be subtracted by prefacing the class with a "
-        "- sign.",
-
+		"pgaudit.config_file",
+		"Specifies the file path name for pgaudit configuration.",
         NULL,
-        &auditLog,
-        "none",
-        PGC_SUSET,
-        GUC_LIST_INPUT | GUC_NOT_IN_SAMPLE,
-        check_pgaudit_log,
-        assign_pgaudit_log,
-        NULL);
-
-    /* Define pgaudit.log_catalog */
-    DefineCustomBoolVariable(
-        "pgaudit.log_catalog",
-
-        "Specifies that session logging should be enabled in the case where "
-        "all relations in a statement are in pg_catalog.  Disabling this "
-         "setting will reduce noise in the log from tools like psql and PgAdmin "
-        "that query the catalog heavily.",
-
-        NULL,
-        &auditLogCatalog,
-        true,
-        PGC_SUSET,
-        GUC_NOT_IN_SAMPLE,
-        NULL, NULL, NULL);
-
-    /* Define pgaudit.log_level */
-    DefineCustomStringVariable(
-        "pgaudit.log_level",
-
-        "Specifies the log level that will be used for log entries. This "
-        "setting is used for regression testing and may also be useful to end "
-        "users for testing or other purposes.  It is not intended to be used "
-        "in a production environment as it may leak which statements are being "
-        "logged to the user.",
-
-        NULL,
-        &auditLogLevelString,
-        "log",
-        PGC_SUSET,
-        GUC_LIST_INPUT | GUC_NOT_IN_SAMPLE,
-        check_pgaudit_log_level,
-        assign_pgaudit_log_level,
-        NULL);
-
-    /* Define pgaudit.log_parameter */
-    DefineCustomBoolVariable(
-        "pgaudit.log_parameter",
-
-        "Specifies that audit logging should include the parameters that were "
-        "passed with the statement. When parameters are present they will be "
-        "be included in CSV format after the statement text.",
-
-        NULL,
-        &auditLogParameter,
-        false,
-        PGC_SUSET,
-        GUC_NOT_IN_SAMPLE,
-        NULL, NULL, NULL);
-
-    /* Define pgaudit.log_relation */
-    DefineCustomBoolVariable(
-        "pgaudit.log_relation",
-
-        "Specifies whether session audit logging should create a separate log "
-        "entry for each relation referenced in a SELECT or DML statement. "
-        "This is a useful shortcut for exhaustive logging without using object "
-        "audit logging.",
-
-        NULL,
-        &auditLogRelation,
-        false,
-        PGC_SUSET,
-        GUC_NOT_IN_SAMPLE,
-        NULL, NULL, NULL);
-
-    /* Define pgaudit.log_statement_once */
-    DefineCustomBoolVariable(
-        "pgaudit.log_statement_once",
-
-        "Specifies whether logging will include the statement text and "
-        "parameters with the first log entry for a statement/substatement "
-        "combination or with every entry.  Disabling this setting will result "
-        "in less verbose logging but may make it more difficult to determine "
-        "the statement that generated a log entry, though the "
-        "statement/substatement pair along with the process id should suffice "
-        "to identify the statement text logged with a previous entry.",
-
-        NULL,
-        &auditLogStatementOnce,
-        false,
-        PGC_SUSET,
-        GUC_NOT_IN_SAMPLE,
-        NULL, NULL, NULL);
-
-        /* Define pgaudit.role */
-        DefineCustomStringVariable(
-            "pgaudit.role",
-
-            "Specifies the master role to use for object audit logging.  Muliple "
-            "audit roles can be defined by granting them to the master role. This "
-            "allows multiple groups to be in charge of different aspects of audit "
-            "logging.",
-
-            NULL,
-            &auditRole,
-            "",
-            PGC_SUSET,
-            GUC_NOT_IN_SAMPLE,
-            NULL, NULL, NULL);
+		&config_file,
+		"",
+		PGC_POSTMASTER,
+		GUC_NOT_IN_SAMPLE,
+		NULL, NULL, NULL);
 
     /*
      * Install our hook functions after saving the existing pointers to
@@ -1951,9 +2788,60 @@ _PG_init(void)
 
     next_object_access_hook = object_access_hook;
     object_access_hook = pgaudit_object_access_hook;
+    /* register emit_log_hook to handle CONNECTION events. */
+    next_emit_log_hook = emit_log_hook;
+    emit_log_hook = pgaudit_emit_log_hook;
+    
+    /* register ExecutorEnd_hook for SESSION-AUDIT-LOG Rules execution timing */
+    next_ExecutorEnd_hook = ExecutorEnd_hook;
+    ExecutorEnd_hook = pgaudit_ExecutorEnd_hook;
+
+    /* register ClientAuthentication_hook to debug the timing it called */
+    next_ClientAuthentication_hook = ClientAuthentication_hook;
+    ClientAuthentication_hook = pgaudit_ClientAuthentication_hook;
+
+    /*
+     * Allocate Context for the SESSION-AUDIT-LOG data collection.
+     *
+     * Data area is once allocated in this context are permanent, and never be
+     * free. These area can be static, but the max length of these can't fixed.
+     */
+    contextAuditPermanent = AllocSetContextCreate(CacheMemoryContext,
+        	                                 "pgaudit permanent context",
+        	                                 ALLOCSET_DEFAULT_MINSIZE,
+        	                                 ALLOCSET_DEFAULT_INITSIZE,
+        	                                 ALLOCSET_DEFAULT_MAXSIZE);
+    contextOld = MemoryContextSwitchTo(contextAuditPermanent);
+
+ 	/* Apply the locale to the messages those emit_log_hook() handles. */
+    pgaudit_initMessages();
+
+    /* init the Audit Data Field */
+    pgaudit_initItems(true);
+
+    /* Deploy the audit configlation from config_file. */
+    pgaudit_parseConfiguration( config_file );
+
+    MemoryContextSwitchTo(contextOld);
+
+    /*
+     *  Set ON to Log_connections and Log_disconnections to get timing.
+     *  And keep old setting to recover edata at emit_log_hoock.
+     */
+    saveLogConnections = Log_connections;
+    Log_connections = true;
+    saveLogDisconnections = Log_disconnections;
+    Log_disconnections = true;
+    saveLogReplicationCommands = log_replication_commands;
+    log_replication_commands = true;
+
+     /* Log that the extension has completed initialization */
+     ereport(LOG, (errmsg("pgaudit extension initialized")));
 
     /* Log that the extension has completed initialization */
     ereport(LOG, (errmsg("pgaudit extension initialized")));
 
+    /* Start pgaudit_emit_log_hook. */
+    isPGinitDone = true;
     inited = true;
 }

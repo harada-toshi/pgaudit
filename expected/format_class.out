@@ -1,0 +1,24 @@
+	        format = 'AUDIT:(1) %class,%command_tag,%command_text'
+	        format = 'AUDIT:(2) %class,%connection_message'
+LOG:  AUDIT:(2) SYSTEM,normal ended
+LOG:  AUDIT:(2) SYSTEM,ready
+LOG:  AUDIT:(2) CONNECT,received
+LOG:  AUDIT:(2) CONNECT,authorized
+LOG:  AUDIT:(2) CONNECT,disconnected
+LOG:  AUDIT:(2) CONNECT,received
+LOG:  AUDIT:(2) CONNECT,authorized
+LOG:  AUDIT:(1) DDL,CREATE TABLE,CREATE TABLE foo (id int, data text);
+LOG:  AUDIT:(1) DDL,CREATE FUNCTION,CREATE FUNCTION foo_add(p1 int, p2 int) RETURNS integer AS $$
+LOG:  AUDIT:(1) MISC,BEGIN,BEGIN;
+LOG:  AUDIT:(1) READ,SELECT,SELECT foo_add(10, 20);
+LOG:  AUDIT:(1) FUNCTION,EXECUTE,SELECT foo_add(10, 20);
+LOG:  AUDIT:(1) WRITE,INSERT,INSERT INTO foo VALUES (1, 'aaa'),(2,'bbb');
+LOG:  AUDIT:(1) READ,SELECT,TABLE foo;
+LOG:  AUDIT:(1) WRITE,UPDATE,UPDATE foo SET data = 'BBB' WHERE id = 2;
+LOG:  AUDIT:(1) WRITE,DELETE,DELETE FROM foo WHERE id = 1;
+LOG:  AUDIT:(1) READ,SELECT,SELECT * FROM foo;
+LOG:  AUDIT:(1) WRITE,TRUNCATE TABLE,TRUNCATE foo;
+LOG:  AUDIT:(1) MISC,COMMIT,COMMIT;
+LOG:  AUDIT:(1) DDL,DROP FUNCTION,DROP FUNCTION foo_add(p1 int, p2 int);
+LOG:  AUDIT:(1) DDL,DROP TABLE,DROP TABLE foo;
+LOG:  AUDIT:(2) CONNECT,disconnected

@@ -1,0 +1,16 @@
+	        format = 'AUDIT: %class,%command_tag,%object_type,%object_id,%command_text'
+LOG:  AUDIT: WRITE,INSERT,TABLE,public.foo,INSERT INTO foo (id, data) VALUES (1, 'aaa'),(2, 'bbb'),(3, 'ccc');
+LOG:  AUDIT: WRITE,COPY,,,COPY foo FROM '/tmp/__sql_dml_in.data';
+LOG:  AUDIT: WRITE,INSERT,TABLE,public.foo,COPY foo FROM '/tmp/__sql_dml_in.data';
+LOG:  AUDIT: WRITE READ,INSERT SELECT,TABLE TABLE,public.foo_copy public.foo,INSERT INTO foo_copy SELECT * FROM foo;
+LOG:  AUDIT: READ,COPY,,,COPY foo TO '/tmp/__sql_dml_out.data';
+LOG:  AUDIT: READ,SELECT,TABLE,public.foo,COPY foo TO '/tmp/__sql_dml_out.data';
+LOG:  AUDIT: READ,SELECT,TABLE,public.foo_copy,COPY (SELECT * FROM foo_copy WHERE id = 2) TO '/tmp/__sql_dml_out.data';
+LOG:  AUDIT: READ,COPY,,,COPY (SELECT * FROM foo_copy WHERE id = 2) TO '/tmp/__sql_dml_out.data';
+LOG:  AUDIT: READ,SELECT,,,SELECT 1;
+LOG:  AUDIT: READ,SELECT,,,SELECT * FROM (SELECT generate_series(1, 10) as seq) as series;
+LOG:  AUDIT: READ,SELECT,TABLE,public.foo,SELECT * FROM foo WHERE id = 3;
+LOG:  AUDIT: READ READ,SELECT SELECT,TABLE TABLE,public.foo public.foo_copy,SELECT foo.id, foo_copy.data FROM foo INNER JOIN foo_copy ON foo.id = foo_copy.id WHERE foo.id = 2;
+LOG:  AUDIT: WRITE,UPDATE,TABLE,public.foo,UPDATE foo SET data = 'BBB' WHERE id = 2;
+LOG:  AUDIT: WRITE,DELETE,TABLE,public.foo,DELETE FROM foo WHERE id = 2;
+LOG:  AUDIT: WRITE,TRUNCATE TABLE,,,TRUNCATE foo,foo_copy;

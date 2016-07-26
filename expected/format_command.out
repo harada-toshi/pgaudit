@@ -1,0 +1,7 @@
+	        format = 'AUDIT: %class,%command_tag,%command_parameter,%command_text'
+LOG:  AUDIT: MISC,BEGIN,,BEGIN;
+LOG:  AUDIT: READ,PREPARE,,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: READ,SELECT,plpgsql 1.0,PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+LOG:  AUDIT: MISC,EXECUTE,,EXECUTE prep_dx ('plpgsql','1.0');
+LOG:  AUDIT: MISC,DEALLOCATE,,DEALLOCATE PREPARE prep_dx;
+LOG:  AUDIT: MISC,COMMIT,,END;

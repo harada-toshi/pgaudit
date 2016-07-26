@@ -1,0 +1,8 @@
+		format='AUDIT: %object_id,%command_text'
+LOG:  AUDIT: ,SELECT 1;
+LOG:  AUDIT: pg_catalog.pg_am,SELECT * FROM pg_am;
+		format='AUDIT: %object_id,%command_text'
+LOG:  AUDIT: ,SELECT 1;
+LOG:  AUDIT: pg_catalog.pg_am,SELECT * FROM pg_am;
+		format='AUDIT: %object_id,%command_text'
+LOG:  AUDIT: ,SELECT 1;

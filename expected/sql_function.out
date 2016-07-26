@@ -1,0 +1,16 @@
+	        format = 'AUDIT: %class,%command_tag,%object_type,%object_id,%command_text'
+LOG:  AUDIT: DDL,CREATE FUNCTION,FUNCTION,public.test_func(integer),CREATE OR REPLACE FUNCTION test_func(l integer) RETURNS integer AS $$
+LOG:  AUDIT: READ,SELECT,,,SELECT test_func(5);
+LOG:  AUDIT: FUNCTION,EXECUTE,FUNCTION,public.test_func,SELECT test_func(5);
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: DDL,DROP FUNCTION,FUNCTION,public.test_func(integer),DROP FUNCTION test_func(l integer);
+LOG:  AUDIT: FUNCTION,DO,,,DO $$
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)
+LOG:  AUDIT: READ,SELECT,,,SELECT power(i, 2)

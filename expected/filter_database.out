@@ -1,0 +1,5 @@
+	        format = 'AUDIT:(1) %database,%user,%current_user,%connection_message'
+	        format = 'AUDIT:(2) %database,%user,%current_user,%connection_message'
+LOG:  AUDIT:(1) foo,foo_user,foo_user,
+LOG:  AUDIT:(2) foo,foo_user,foo_user,
+LOG:  AUDIT:(1) bar,foo_user,foo_user,

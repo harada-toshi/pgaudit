@@ -1,0 +1,30 @@
+LOG:  AUDIT: SESSION,,,SYSTEM,,,,
+LOG:  AUDIT: SESSION,,,SYSTEM,,,,
+LOG:  AUDIT: SESSION,,,CONNECT,,,,
+LOG:  AUDIT: SESSION,,,CONNECT,,,,
+LOG:  AUDIT: SESSION,1,1,ROLE,CREATE ROLE,,,CREATE USER test_auditor;
+LOG:  AUDIT: SESSION,2,1,DDL,CREATE TABLE,TABLE,public.foo,CREATE TABLE IF NOT EXISTS foo (id int, data text);
+LOG:  AUDIT: SESSION,3,1,DDL,CREATE TABLE,TABLE,public.bar,CREATE TABLE IF NOT EXISTS bar (id int, data text);
+LOG:  AUDIT: SESSION,4,1,DDL,CREATE TABLE,TABLE,public.baz,CREATE TABLE IF NOT EXISTS baz (id int, data text);
+LOG:  AUDIT: SESSION,5,1,ROLE,GRANT,TABLE,,GRANT ALL ON foo TO test_auditor;
+LOG:  AUDIT: SESSION,6,1,ROLE,GRANT,TABLE,,GRANT ALL ON bar TO test_auditor;
+LOG:  AUDIT: SESSION,7,1,ROLE,GRANT,TABLE,,GRANT ALL ON baz TO test_auditor;
+LOG:  AUDIT: SESSION,8,1,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;
+LOG:  AUDIT: SESSION,9,1,READ READ,SELECT SELECT,TABLE TABLE,public.foo public.bar,SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;
+LOG:  AUDIT: SESSION,10,1,READ READ READ,SELECT SELECT SELECT,TABLE TABLE TABLE,public.foo public.bar public.baz,SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;
+LOG:  AUDIT: SESSION,11,1,DDL,DROP TABLE,TABLE,public.foo,DROP TABLE IF EXISTS foo;
+LOG:  AUDIT: SESSION,12,1,DDL,DROP TABLE,TABLE,public.bar,DROP TABLE IF EXISTS bar;
+LOG:  AUDIT: SESSION,13,1,DDL,DROP TABLE,TABLE,public.baz,DROP TABLE IF EXISTS baz;
+LOG:  AUDIT: SESSION,14,1,ROLE,DROP ROLE,,,DROP USER test_auditor;
+LOG:  AUDIT: SESSION,,,CONNECT,,,,
+	        format = 'AUDIT: %d,%class,%command_tag,%object_type,%object_id,%command_text'
+LOG:  AUDIT: contrib_regression,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;
+LOG:  AUDIT: contrib_regression,READ READ,SELECT SELECT,TABLE TABLE,public.foo public.bar,SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;
+LOG:  AUDIT: contrib_regression,READ READ READ,SELECT SELECT SELECT,TABLE TABLE TABLE,public.foo public.bar public.baz,SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;
+	        format = 'AUDIT:(1) %d,%class,%command_tag,%object_type,%object_id,%command_text'
+	        format = 'AUDIT:(2) %d,%class,%command_tag,%object_type,%object_id,%command_text'
+LOG:  AUDIT:(1) contrib_regression,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;
+LOG:  AUDIT:(1) contrib_regression,READ READ,SELECT SELECT,TABLE TABLE,public.foo public.bar,SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;
+LOG:  AUDIT:(2) contrib_regression,READ READ,SELECT SELECT,TABLE TABLE,public.foo public.bar,SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;
+LOG:  AUDIT:(1) contrib_regression,READ READ READ,SELECT SELECT SELECT,TABLE TABLE TABLE,public.foo public.bar public.baz,SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;
+LOG:  AUDIT:(2) contrib_regression,READ READ READ,SELECT SELECT SELECT,TABLE TABLE TABLE,public.foo public.bar public.baz,SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;

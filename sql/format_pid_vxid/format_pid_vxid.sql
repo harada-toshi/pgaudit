@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS foo (id int, data text);
+BEGIN;
+SELECT 'ABC';
+SELECT * FROM foo;
+END;
+DROP TABLE foo;

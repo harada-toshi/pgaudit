@@ -1,0 +1,8 @@
+		format='AUDIT: %command_text'
+LOG:  AUDIT: CREATE TABLE test (id int, data text);
+LOG:  AUDIT: INSERT INTO test VALUES (1, 'AAA'),(2, 'BBB');
+LOG:  AUDIT: UPDATE test SET data = 'XXX' WHERE id = 3;
+LOG:  AUDIT: DELETE FROM test WHERE id = 4;
+LOG:  AUDIT: SELECT * FROM test;
+LOG:  AUDIT: TRUNCATE test;
+LOG:  AUDIT: DROP TABLE test;

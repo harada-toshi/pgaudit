@@ -1,0 +1,6 @@
+	        format = 'AUDIT:(A) %t,%class,%command_tag,%command_text'
+	        format = 'AUDIT:(A) %t,%class,%command_tag,%command_text'
+	        format = 'AUDIT:(B) %t,%class,%command_tag,%command_text'
+	        format = 'AUDIT:(B) %t,%class,%command_tag,%command_text'
+LOG:  AUDIT:(A) X-X-X X:X:X     JST,READ,SELECT,SELECT now()
+LOG:  AUDIT:(B) X-X-X X:X:X     JST,READ,SELECT,SELECT now()

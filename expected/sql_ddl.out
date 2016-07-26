@@ -1,0 +1,9 @@
+	        format = 'AUDIT: %class,%command_tag,%object_type,%object_id,%command_text'
+LOG:  AUDIT: DDL,CREATE TABLE,TABLE,public.foo,CREATE TABLE foo (
+LOG:  AUDIT: DDL,CREATE INDEX,INDEX,public.foo_id_key,CREATE TABLE foo (
+LOG:  AUDIT: DDL,CREATE TABLE AS,TABLE,public.bar,CREATE TABLE bar AS SELECT * FROM foo;
+LOG:  AUDIT: DDL,ALTER TABLE,TABLE,public.baz,ALTER TABLE foo RENAME TO baz;
+LOG:  AUDIT: DDL,DROP TABLE,TABLE,public.bar,DROP TABLE bar;
+LOG:  AUDIT: DDL,DROP TABLE,TABLE,public.baz,DROP TABLE baz;
+LOG:  AUDIT: DDL,DROP TABLE,TABLE CONSTRAINT,foo_id_key on public.baz,DROP TABLE baz;
+LOG:  AUDIT: DDL,DROP TABLE,INDEX,public.foo_id_key,DROP TABLE baz;

@@ -1,0 +1,18 @@
+LOG:  AUDIT: OBJECT,8,1,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;,<not logged>
+LOG:  AUDIT: OBJECT,9,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;",<not logged>
+LOG:  AUDIT: OBJECT,9,1,READ,SELECT,TABLE,public.bar,"SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.bar,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.baz,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
+LOG:  AUDIT: OBJECT,8,1,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;,<not logged>
+LOG:  AUDIT: OBJECT,9,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;",<not logged>
+LOG:  AUDIT: OBJECT,9,1,READ,SELECT,TABLE,public.bar,<previously logged>,<previously logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.bar,<previously logged>,<previously logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.baz,<previously logged>,<previously logged>
+LOG:  AUDIT: OBJECT,8,1,READ,SELECT,TABLE,public.foo,SELECT * FROM foo;,<not logged>
+LOG:  AUDIT: OBJECT,9,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;",<not logged>
+LOG:  AUDIT: OBJECT,9,1,READ,SELECT,TABLE,public.bar,"SELECT foo.id, bar.data FROM foo, bar WHERE foo.id = bar.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.foo,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.bar,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
+LOG:  AUDIT: OBJECT,10,1,READ,SELECT,TABLE,public.baz,"SELECT foo.id, bar.data, baz.data FROM foo, bar, baz WHERE foo.id = bar.id AND foo.id = baz.id;",<not logged>
