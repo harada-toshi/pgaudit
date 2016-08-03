@@ -87,7 +87,7 @@ char *config_file = NULL;
  * > 1 means that we alreadby emited some logs, so we don't need to emit log anymore.
  *
  * In case where we want to use elog/ereport, we should use AUDIT_ELOG/EREPORT instead
- *  which easily avoid to emit log recusively.
+ * which easily avoid to emit log recusively.
  */
 static int emitAuditLogCalled = 0;
 #define START_AUDIT_LOGGING()	(emitAuditLogCalled++)
@@ -170,9 +170,12 @@ pgaudit_emit_log_hook(ErrorData *edata)
 			/*
 			 * XXX : We should separate function for emitting log to common
 			 * function with log_audit_event.
+			 *
+			 * XXX : We should support output format specified by 'format' or
+			 * emit the fixed format log.
 			 */
 			AUDIT_EREPORT(auditLogLevel,
-					(errmsg("AUDIT: SESSION,%s,%s",
+					(errmsg("AUDIT: SESSION,,,%s,%s",
 							className,
 							edata->message),
 					 errhidestmt(true),
@@ -275,6 +278,7 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 			appendStringInfoString(&auditStr,
 								   "<previously logged>,<previously logged>");
 
+		/* Emit the audit log */
 		ereport(auditLogLevel,
 				(errmsg("AUDIT: SESSION," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
 						stackItem->auditEvent.statementId,
@@ -289,7 +293,7 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 
 }
 
-/* Debug functio which will be removed */
+/* XXX : Debug functio which will be removed */
 static void
 print_config(void)
 {
@@ -1628,6 +1632,7 @@ _PG_init(void)
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
 
     /* Define pgaudit.log_relation */
+	/* XXX : Should we leave this GUC parameter? */
     DefineCustomBoolVariable(
         "pgaudit.log_relation",
 
@@ -1678,12 +1683,13 @@ _PG_init(void)
 		ereport(ERROR, (errmsg("\"pgaudit.config_file\" must be specify when pgaudit is loaded")));
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
+	/* XXX : Should we use palloc instead? */
 	outputConfig = (AuditOutputConfig *) malloc(sizeof(AuditOutputConfig));
 	ruleConfigs = NULL;
 
 	/* Parse configuration file specified by pgaudit.config_file */
 	processAuditConfigFile(config_file);
-	print_config(); /* debug output */
+	print_config(); /* XXX : debug output will be removed */
 
 	MemoryContextSwitchTo(old_ctx);
 

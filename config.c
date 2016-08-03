@@ -359,7 +359,7 @@ validate_settings(char *field, char *op,char *value,
 					/* The value is an CSV format */
 					if (!SplitIdentifierString(value, ',', &value_list))
 					{
-						/* error */
+						/* XXX : error */
 					}
 
 					list_len = list_length(value_list);
@@ -457,7 +457,7 @@ validate_settings(char *field, char *op,char *value,
 							/* The timestamp range should be separated by '-' */
 							if (!SplitIdentifierString(range_string, '-', &ts_list))
 							{
-								/* error */
+								/* XXX : error */
 							}
 
 							/* We expect that the format of each ts_cell is 'HH:MM:SS' */
@@ -480,7 +480,7 @@ validate_settings(char *field, char *op,char *value,
 	}
 	else
 	{
-		/* error */
+		/* XXX : error */
 	}
 }
 
