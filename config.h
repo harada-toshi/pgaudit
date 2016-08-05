@@ -84,7 +84,6 @@ extern bool auditLogCatalog;
 extern char *auditLogLevelString;
 extern int auditLogLevel;
 extern bool auditLogParameter;
-extern bool auditLogRelation;
 extern bool auditLogStatementOnce;
 extern char *auditRole;
 

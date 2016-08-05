@@ -303,7 +303,6 @@ print_config(void)
 	fprintf(stderr, "log_level_string = %s\n", auditLogLevelString);
 	fprintf(stderr, "log_level = %d\n", auditLogLevel);
 	fprintf(stderr, "log_parameter = %d\n", auditLogParameter);
-	fprintf(stderr, "log_relation = %d\n", auditLogRelation);
 	fprintf(stderr, "log_statement_once = %d\n", auditLogStatementOnce);
 	fprintf(stderr, "role = %s\n", auditRole);
 	fprintf(stderr, "logger = %s\n", outputConfig->logger);
@@ -946,7 +945,6 @@ static void
 log_select_dml(Oid auditOid, List *rangeTabls)
 {
     ListCell *lr;
-    bool first = true;
     bool found = false;
 
     /* Do not log if this is an internal statement */
@@ -992,17 +990,6 @@ log_select_dml(Oid auditOid, List *rangeTabls)
          * logging.  Will be updated below if a grant is found.
          */
         auditEventStack->auditEvent.granted = false;
-
-        /*
-         * If this is the first RTE then session log unless auditLogRelation
-         * is set.
-         */
-        if (first && !auditLogRelation)
-        {
-            log_audit_event(auditEventStack);
-
-            first = false;
-        }
 
         /*
          * We don't have access to the parsetree here, so we have to generate
@@ -1145,13 +1132,10 @@ log_select_dml(Oid auditOid, List *rangeTabls)
             log_audit_event(auditEventStack);
         }
 
-        /* Do relation level logging if auditLogRelation is set */
-        if (auditLogRelation)
-        {
-            auditEventStack->auditEvent.logged = false;
-            auditEventStack->auditEvent.granted = false;
-            log_audit_event(auditEventStack);
-        }
+        /* Do SESSION logging */
+		auditEventStack->auditEvent.logged = false;
+		auditEventStack->auditEvent.granted = false;
+		log_audit_event(auditEventStack);
 
         pfree(auditEventStack->auditEvent.objectName);
     }
@@ -1630,23 +1614,6 @@ _PG_init(void)
     if (!process_shared_preload_libraries_in_progress)
         ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
-
-    /* Define pgaudit.log_relation */
-	/* XXX : Should we leave this GUC parameter? */
-    DefineCustomBoolVariable(
-        "pgaudit.log_relation",
-
-        "Specifies whether session audit logging should create a separate log "
-        "entry for each relation referenced in a SELECT or DML statement. "
-        "This is a useful shortcut for exhaustive logging without using object "
-        "audit logging.",
-
-        NULL,
-        &auditLogRelation,
-        false,
-        PGC_SUSET,
-        GUC_NOT_IN_SAMPLE,
-        NULL, NULL, NULL);
 
 		/* Define pgaudit.confg_file */
 	DefineCustomStringVariable(

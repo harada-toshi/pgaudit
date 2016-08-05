@@ -73,13 +73,6 @@ int auditLogLevel = LOG;
 bool auditLogParameter = false;
 
 /*
- * Administrators can choose, in SESSION logging, to log each relation involved
- * in READ/WRITE class queries.  By default, SESSION logs include the query but
- * do not have a log entry for each relation.
- */
-bool auditLogRelation = false;
-
-/*
  * Administrators can choose to have the statement run logged only once instead
  * of on every line.  By default, the statement is repeated on every line of
  * the audit log to facilitate searching, but this can cause the log to be
