@@ -229,11 +229,13 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	bool matched = false;
 
 	char *database_name = NULL;
+	char *object_id = NULL;
 
 	if (stackItem != NULL)
 	{
 		/* XXX : Prepare information for session "statement" logging */
 		database_name = MyProcPort->database_name;
+		object_id = stackItem->auditEvent.objectName;
 	}
 	else
 	{
@@ -259,7 +261,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 			apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
+			apply_one_rule(object_id, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
