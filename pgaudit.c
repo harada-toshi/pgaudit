@@ -305,12 +305,12 @@ print_config(void)
 	fprintf(stderr, "log_parameter = %d\n", auditLogParameter);
 	fprintf(stderr, "log_statement_once = %d\n", auditLogStatementOnce);
 	fprintf(stderr, "role = %s\n", auditRole);
-	fprintf(stderr, "logger = %s\n", outputConfig->logger);
-	fprintf(stderr, "facility = %s\n", outputConfig->facility);
-	fprintf(stderr, "priority = %s\n", outputConfig->priority);
-	fprintf(stderr, "ident = %s\n", outputConfig->ident);
-	fprintf(stderr, "option = %s\n", outputConfig->option);
-	fprintf(stderr, "pathlog = %s\n", outputConfig->pathlog);
+	fprintf(stderr, "logger = %s\n", outputConfig.logger);
+	fprintf(stderr, "facility = %s\n", outputConfig.facility);
+	fprintf(stderr, "priority = %s\n", outputConfig.priority);
+	fprintf(stderr, "ident = %s\n", outputConfig.ident);
+	fprintf(stderr, "option = %s\n", outputConfig.option);
+	fprintf(stderr, "pathlog = %s\n", outputConfig.pathlog);
 
 	foreach(cell, ruleConfigs)
 	{
@@ -1650,8 +1650,6 @@ _PG_init(void)
 		ereport(ERROR, (errmsg("\"pgaudit.config_file\" must be specify when pgaudit is loaded")));
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
-	/* XXX : Should we use palloc instead? */
-	outputConfig = (AuditOutputConfig *) malloc(sizeof(AuditOutputConfig));
 	ruleConfigs = NULL;
 
 	/* Parse configuration file specified by pgaudit.config_file */

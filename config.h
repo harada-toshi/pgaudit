@@ -87,7 +87,7 @@ extern bool auditLogParameter;
 extern bool auditLogStatementOnce;
 extern char *auditRole;
 
-extern AuditOutputConfig *outputConfig;
+extern AuditOutputConfig outputConfig;
 extern List	*ruleConfigs;
 
 /* extern functions */
