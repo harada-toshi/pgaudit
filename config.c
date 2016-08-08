@@ -95,7 +95,7 @@ bool auditLogStatementOnce = false;
 char *auditRole = "";
 
 /* Global variable for output and rule sections */
-AuditOutputConfig *outputConfig;
+AuditOutputConfig outputConfig;
 List	*ruleConfigs;
 
 static int	audit_parse_state = 0;
@@ -300,21 +300,21 @@ validate_settings(char *field, char *op,char *value,
 	if (audit_parse_state == AUDIT_SECTION_OUTPUT)
 	{
 		if ((strcmp(field, "logger") == 0))
-			outputConfig->logger = value;
+			outputConfig.logger = value;
 		else if ((strcmp(field, "level") == 0))
 		{
-			outputConfig->level = value;
+			outputConfig.level = value;
 		}
 		else if ((strcmp(field, "pathlog") == 0))
-			outputConfig->pathlog = value;
+			outputConfig.pathlog = value;
 		else if ((strcmp(field, "facility") == 0))
-			outputConfig->facility = value;
+			outputConfig.facility = value;
 		else if ((strcmp(field, "priority") == 0))
-			outputConfig->priority = value;
+			outputConfig.priority = value;
 		else if ((strcmp(field, "ident") == 0))
-			outputConfig->ident = value;
+			outputConfig.ident = value;
 		else if ((strcmp(field, "option") == 0))
-			outputConfig->option = value;
+			outputConfig.option = value;
 	}
 	/* Validation for options section */
 	else if (audit_parse_state == AUDIT_SECTION_OPTIONS)
