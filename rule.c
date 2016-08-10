@@ -235,7 +235,8 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	{
 		/* XXX : Prepare information for session "statement" logging */
 		database_name = MyProcPort->database_name;
-		object_id = stackItem->auditEvent.objectName;
+		object_id = (stackItem->auditEvent.objectName == NULL) ?
+			"" : stackItem->auditEvent.objectName;
 	}
 	else
 	{
