@@ -257,8 +257,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 
 		if (apply_one_rule(NULL, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
 			apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_CURRENT_USER]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_USER]) &&
+			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
 			apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
 			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&

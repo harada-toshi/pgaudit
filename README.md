@@ -576,13 +576,12 @@ The following keywords (a part of escapes written to the format) can be used:
 ```
 class
 command_tag
-current_user
+audit_role
 database
 object_type
 object_id
 remote_host
 remote_port
-user
 timestamp
 ```
 
@@ -597,11 +596,16 @@ The timestamp used `pgaudit` rule evaluation internally is different from one is
 - class
 
 Specifies which classes of statements will be logged. Possible values are a comma-delimited list of the values, and the values we described for `%class` (see [Format](#format)).
+
 - object_type
 
 Specifies which type of objects will be logged. Possible values are a comma-delimited list of the values which was described for `%object_type` (see [Format](#format)).
 
-- command_tag, current_user, database, object_id, remote_host, remote_port, user
+- audit_role
+
+Specifies which use belonging  to role will be logged.  Possible values are a comma-delimited list of the values.
+
+- command_tag, database, object_id, remote_host, remote_port
 
 Specifies which database elements in the statements will be logged. Possible values are a comma-delimited list. Spaces and tabs between the values and commas are ignored. In the value '%' can be used for backward match or forward match.
 

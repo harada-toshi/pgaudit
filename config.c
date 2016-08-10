@@ -40,8 +40,7 @@ struct AuditRule rules_template[] =
 {
 	{"timestamp", NULL, false, 0, AUDIT_RULE_TYPE_TIMESTAMP},
 	{"database", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
-	{"current_user", NULL, false, 0, AUDIT_RULE_TYPE_INT},
-	{"user", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
+	{"audit_role", NULL, false, 0, AUDIT_RULE_TYPE_INT},
 	{"class", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
 	{"command_tag", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"object_type", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
