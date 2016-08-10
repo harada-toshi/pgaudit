@@ -14,7 +14,7 @@
 
 #include "rule.h"
 
-#define AUDIT_NUM_RULES 11
+#define AUDIT_NUM_RULES 10
 #define MAX_NAME_LEN 8192
 
 /*
