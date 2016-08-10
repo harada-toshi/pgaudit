@@ -255,19 +255,48 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 		AuditRuleConfig *rconf = (AuditRuleConfig *)lfirst(cell);
 		bool ret = false;
 
-		if (apply_one_rule(NULL, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
-			apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
-			apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
-			apply_one_rule(object_id, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
-			apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
+		if (class & LOG_READ || class & LOG_WRITE || class & LOG_MISC)
 		{
-			matched = true;
-			ret = true;
+			/*
+			 * When we're about to log related to table operation such as read,
+			 * write and misc, we apply object_id and object_type rule in addition.
+			 */
+			if (apply_one_rule(NULL, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
+				apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
+				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
+				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
+				apply_one_rule(object_id, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
+			{
+				matched = true;
+				ret = true;
+			}
+		}
+		else
+		{
+			/*
+			 * When we're about to log related to, for exmple, error, connection,
+			 * fucntion, backup, ddl and connect, we apply the rules except for
+			 * object_id and object_type.
+			 *
+			 * XXX : Need to consider how we process AUDIT_RULE_COMMAND_TAG.
+			 */
+			if (apply_one_rule(NULL, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
+				apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
+				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
+				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
+				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
+			{
+				matched = true;
+				ret = true;
+			}
 		}
 
 		/*
