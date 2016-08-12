@@ -41,7 +41,7 @@ comment		^#.*
 
 field_output    logger|pathlog|ident|option|facility|priority|level|maxlength
 field_options   log_catalog|log_level|log_parameter|log_statement_once|role
-field_rule      format|timestamp|database|current_user|user|class|command_tag|object_type|object_id|application_name|command_result|remote_host|remote_port
+field_rule      format|timestamp|database|audit_role|class|command_tag|object_type|object_id|application_name|command_result|remote_host|remote_port
 %%
 
 <<EOF>>         return AUDIT_EOF;
