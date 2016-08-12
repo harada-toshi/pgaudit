@@ -349,7 +349,7 @@ apply_string_rule(char *value, AuditRule rule)
 	int i;
 	char **string_list = (char **) rule.values;
 
-	/* Return ture if this rule was not defined */
+	/* Return ture if this rule is not defined */
 	if (rule.values == NULL)
 		return true;
 
