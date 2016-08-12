@@ -25,9 +25,6 @@
 %option warn
 %option prefix="pgaudit_yy"
 
-%x COMMENT
-%x LITERAL_STATUS
-
 space		[ \t\n\r\f\v]
 
 char		[a-zA-Z\%\,]
@@ -37,7 +34,7 @@ boolean		off|on|true|false|0|1
 op_eq		\=
 op_ne		\!=
 operator	{op_eq}|{op_ne}
-comment		^#.*
+comment		#.*
 
 field_output    logger|pathlog|ident|option|facility|priority|level|maxlength
 field_options   log_catalog|log_level|log_parameter|log_statement_once|role
