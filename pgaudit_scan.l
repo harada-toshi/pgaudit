@@ -74,7 +74,7 @@ void processAuditConfigFile(char* filename)
 	if ((fp = fopen(filename, "r")) == NULL)
 	{
 		ereport(ERROR,
-			       (errcode_for_file_access(), /* XXX : error code */
+			       (errcode_for_file_access(),
 				 errmsg("could not open file \"%s\")", filename)));
 	}
 
