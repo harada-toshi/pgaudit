@@ -30,7 +30,7 @@ endif
 
 # Regression test for all of rules.
 # XXX : we must add existing 'pgaudit' regression test.
-REGRESSCHECKS=database object_type
+REGRESSCHECKS=database object_type class
 installcheck:
 	$(pg_regress_installcheck) \
 		--temp-config=./conf/postgresql.conf \
