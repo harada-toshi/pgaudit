@@ -93,7 +93,7 @@ extern List	*ruleConfigs;
 /* extern functions */
 extern void processAuditConfigFile(char* filename);
 
-extern void pgaudit_set_options(char* name, char* value);
+extern void pgaudit_set_option(char* name, char* value);
 extern void pgaudit_set_output_literal(char* name, char* value);
 extern void pgaudit_set_output_integer(char* name, char* value);
 extern void pgaudit_set_output_boolean(char* name, char* value);

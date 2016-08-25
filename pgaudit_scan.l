@@ -37,7 +37,7 @@ operator	{op_eq}|{op_ne}
 comment		#.*
 
 field_output    logger|pathlog|ident|option|facility|priority|level|maxlength
-field_options   log_catalog|log_level|log_parameter|log_statement_once|role
+field_option   log_catalog|log_level|log_parameter|log_statement_once|role
 field_rule      format|timestamp|database|audit_role|class|command_tag|object_type|object_id|application_name|command_result|remote_host|remote_port
 %%
 
@@ -50,10 +50,10 @@ field_rule      format|timestamp|database|audit_role|class|command_tag|object_ty
 {boolean}	return AUDIT_BOOLEAN;
 {operator}	return AUDIT_OP;
 {field_output}	return AUDIT_FIELD_OUTPUT;
-{field_options}	return AUDIT_FIELD_OPTIONS;
+{field_option}	return AUDIT_FIELD_OPTION;
 {field_rule}	return AUDIT_FIELD_RULE;
 "[output]"	return AUDIT_SECTION_OUTPUT;
-"[options]"	return AUDIT_SECTION_OPTIONS;
+"[option]"	return AUDIT_SECTION_OPTION;
 "[rule]"	return AUDIT_SECTION_RULE;
 {string}	return AUDIT_NAME;
 
@@ -96,7 +96,7 @@ void processAuditConfigFile(char* filename)
 		/* Detected secion string */
 		if (token == AUDIT_SECTION_RULE ||
 			token == AUDIT_SECTION_OUTPUT ||
-			token == AUDIT_SECTION_OPTIONS)
+			token == AUDIT_SECTION_OPTION)
 		{
 			/* Set current state */
 			audit_parse_state = token;
@@ -116,12 +116,12 @@ void processAuditConfigFile(char* filename)
 		}
 
 		if (token == AUDIT_FIELD_OUTPUT ||
-		    token == AUDIT_FIELD_OPTIONS ||
+		    token == AUDIT_FIELD_OPTION ||
 		    token == AUDIT_FIELD_RULE)
 		{
 			/* Check if invalid field is specified in this section */
 			if (!((audit_parse_state == AUDIT_SECTION_RULE && token == AUDIT_FIELD_RULE) ||
-			    (audit_parse_state == AUDIT_SECTION_OPTIONS && token == AUDIT_FIELD_OPTIONS) ||
+			    (audit_parse_state == AUDIT_SECTION_OPTION && token == AUDIT_FIELD_OPTION) ||
 			    (audit_parse_state == AUDIT_SECTION_OUTPUT && token == AUDIT_FIELD_OUTPUT)))
 			{
 				/* error */

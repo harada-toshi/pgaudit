@@ -118,7 +118,7 @@ Set option.role to auditor and grant SELECT and DELETE privileges on the account
 #### In the file named pgaudit.config_file
 
 ```
-[options]
+[option]
 role = 'auditor'
 ```
 #### SQL
@@ -134,7 +134,7 @@ In this example `Object audit logging` is used to illustrate how a granular appr
 #### Inside of the file assigned by pgaudit.config_file:
 
 ```
-[options]
+[option]
 role = 'auditor'
 ```
 
@@ -301,7 +301,7 @@ Each parameter takes a value of one of three types: Boolean, integer, string. Bo
 logger= 'serverlog'
 
 # Behavior of the PGAUDIT (e.g. setting log_catalog)
-[options]
+[option]
 log_catalog = true
 
 # Selection conditions of the Session-Audit-Logging.
@@ -367,15 +367,15 @@ The default setting is 'LOG_USER', 'LOG_WARNING','PGAUDIT', and 'LOG_CONS|LOG_PI
 
 When the same keyword is set more than once in a section, the last setting is effective.
 
-### Options-section ([options])
+### Option-section ([option])
 
-Specifies the behavior of the `pgaudit`. At most one `options-section` can be written at the top of the file or at just after `output-section`. And if you use the default settings, the `options-section` is not necessary.
+Specifies the behavior of the `pgaudit`. At most one `option-section` can be written at the top of the file or at just after `output-section`. And if you use the default settings, the `option-section` is not necessary.
 
-The `options-section` begins with the word `[options]`. We will show an examples, and descriptions of key word and values below;
+The `option-section` begins with the word `[option]`. We will show an examples, and descriptions of key word and values below;
 
 ```
 # Example : set all possible parameters.
-[options]
+[option]
 log_catalog = true
 log_parameter = off
 log_statement_once = OFF
