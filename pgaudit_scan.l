@@ -27,8 +27,8 @@
 
 space		[ \t\n\r\f\v]
 
-char		[a-zA-Z\%\,]
-string		\'([^'\\\n]|\\.|\'\')*\'
+char		[a-zA-Z\%\,\"\'\(\)\*]
+val_string	\'([^'\\\n]|\\.|\'\')*\'
 int		[1-9][0-9]*
 boolean		off|on|true|false|0|1
 op_eq		\=
@@ -45,7 +45,7 @@ field_rule      format|timestamp|database|audit_role|class|command_tag|object_ty
 
 {space}	{ /* ignore */ }
 '\n'	return AUDIT_EOL;
-{comment}	{ /*ignore */ }
+{comment}	return AUDIT_EOL;
 {int}		return AUDIT_INT;
 {boolean}	return AUDIT_BOOLEAN;
 {operator}	return AUDIT_OP;
@@ -55,8 +55,8 @@ field_rule      format|timestamp|database|audit_role|class|command_tag|object_ty
 "[output]"	return AUDIT_SECTION_OUTPUT;
 "[options]"	return AUDIT_SECTION_OPTIONS;
 "[rule]"	return AUDIT_SECTION_RULE;
-{string}	return AUDIT_NAME;
-
+{val_string}	return AUDIT_NAME;
+{char}+		return AUDIT_JUNK;
 %%
 
 /*
@@ -66,7 +66,6 @@ field_rule      format|timestamp|database|audit_role|class|command_tag|object_ty
 void processAuditConfigFile(char* filename)
 {
 	FILE *fp;
-	int parse_rc = 0;
 	AuditRuleConfig *rconf;
 
 	volatile YY_BUFFER_STATE lex_buffer = NULL;
@@ -75,7 +74,7 @@ void processAuditConfigFile(char* filename)
 	if ((fp = fopen(filename, "r")) == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_SUCCESSFUL_COMPLETION), /* XXX : error code */
+			       (errcode_for_file_access(),
 				 errmsg("could not open file \"%s\")", filename)));
 	}
 
@@ -124,7 +123,19 @@ void processAuditConfigFile(char* filename)
 			    (audit_parse_state == AUDIT_SECTION_OPTIONS && token == AUDIT_FIELD_OPTIONS) ||
 			    (audit_parse_state == AUDIT_SECTION_OUTPUT && token == AUDIT_FIELD_OUTPUT)))
 			{
-				/* error */
+				char *state_string;
+
+				if (audit_parse_state == AUDIT_SECTION_RULE)
+					state_string = "rule section";
+				else if (audit_parse_state == AUDIT_SECTION_OPTIONS)
+					state_string = "options section";
+				else
+					state_string = "output section";
+
+				ereport(ERROR,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+						errmsg("invalid parameter \"%s\" in \"%s\" in file \"%s\"",
+						       yytext, state_string, filename)));
 				break;
 			}
 
@@ -135,14 +146,16 @@ void processAuditConfigFile(char* filename)
 			token = yylex();
 			if (token != AUDIT_OP)
 			{
-				/* error */
-				fprintf(stderr, "Syntax error\n");
-				break;
+				ereport(ERROR,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+						errmsg("invalid operator \"%s\" in file \"%s\"", yytext, filename)));
 			}
+
 			op_name = pstrdup(yytext);
 
 			/* Get value */
 			token = yylex();
+
 			if (token == AUDIT_NAME ||
 				  token == AUDIT_INT)
 			{
@@ -155,24 +168,16 @@ void processAuditConfigFile(char* filename)
 				validate_settings(field_name, op_name, value_name, rconf);
 			}
 			else
-			{
-				fprintf(stderr, "INVALID VALUE %s\n", yytext);
-				break;
-			}
+				ereport(ERROR,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+						errmsg("syntax error near token \"%s\" in file \"%s\"",
+						       yytext, filename)));
 		}
 		else
-		{
-			fprintf(stderr, "INVALID TOKEN %s\n", yytext);
-			break;
-		}
-	}
-	if (parse_rc != 0)
-	{
-		/* parse error */
-		ereport(WARNING,
-				(errcode(ERRCODE_SUCCESSFUL_COMPLETION),
-				 errmsg( "pgaudit.config_file = %s    => parse error,"
-						 "All setting is reset in the default value.", filename)));
+			ereport(ERROR,
+				(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					errmsg("unrecognized configuration parameter \"%s\" in file \"%s\"",
+					       yytext, filename)));
 	}
 
 	if ((fclose(fp) != 0))
