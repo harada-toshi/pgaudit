@@ -17,9 +17,6 @@ all: pgaudit.o
 
 config.o: pgaudit_scan.c
 
-REGRESS = pgaudit
-REGRESS_OPTS = --temp-config=$(top_srcdir)/contrib/pgaudit/pgaudit.conf
-
 ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
@@ -30,3 +27,12 @@ top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
+
+# Regression test for all of rules.
+# XXX : we must add existing 'pgaudit' regression test.
+REGRESSCHECKS=database
+installcheck:
+	$(pg_regress_installcheck) \
+		--temp-config=./conf/postgresql.conf \
+		--temp-instance=./tmp_check \
+		$(REGRESSCHECKS)
