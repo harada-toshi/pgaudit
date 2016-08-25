@@ -1,0 +1,21 @@
+CREATE USER foo_user;
+CREATE USER bar_user;
+CREATE DATABASE foo;
+CREATE DATABASE bar;
+-- Audit log must be logged
+\c foo foo_user
+SELECT 1;
+NOTICE:  AUDIT: SESSION,1,1,READ,SELECT,,SELECT 1;,<not logged>
+ ?column? 
+----------
+        1
+(1 row)
+
+-- Audit log must not be logged
+\c bar foo_user
+SELECT 2;
+ ?column? 
+----------
+        2
+(1 row)
+
