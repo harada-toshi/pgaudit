@@ -389,6 +389,15 @@ apply_timestamp_rule(AuditRule rule)
 static bool
 apply_bitmap_rule(int value, AuditRule rule)
 {
-	/* XXX : we should complete this function */
-	return true;
+	int *bitmap = (int*) rule.values;
+	bool ret = false;
+
+	/* Return true if this rule is not defined */
+	if (rule.values == NULL)
+		return true;
+
+	if (value & *bitmap)
+		ret = true;
+
+	return ret;
 }
