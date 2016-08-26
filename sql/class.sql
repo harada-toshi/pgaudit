@@ -19,4 +19,4 @@ CREATE USER test_user;
 GRANT ALL ON a1 To test_user;
 
 -- FUNCTION, logged.
-DO $$ BEGIN EXECUTE 'select ' || '1'; END$$;
+DO $$ BEGIN EXECUTE 'select ' || '* FROM a1'; END$$;
