@@ -1,0 +1,30 @@
+\c foo
+-- DDL, logged.
+CREATE TABLE a1 (col int primary key);
+NOTICE:  AUDIT: SESSION,1,1,DDL,CREATE TABLE,,CREATE TABLE a1 (col int primary key);,<not logged>
+ALTER TABLE a1 SET (fillfactor = 100);
+NOTICE:  AUDIT: SESSION,2,1,DDL,ALTER TABLE,,ALTER TABLE a1 SET (fillfactor = 100);,<not logged>
+-- READ, logged.
+SELECT * FROM a1;
+NOTICE:  AUDIT: SESSION,3,1,READ,SELECT,TABLE,public.a1SELECT * FROM a1;,<not logged>
+ col 
+-----
+(0 rows)
+
+-- WRITE, logged.
+INSERT INTO a1 VALUES(1);
+NOTICE:  AUDIT: SESSION,4,1,WRITE,INSERT,TABLE,public.a1INSERT INTO a1 VALUES(1);,<not logged>
+UPDATE a1 SET col = col;
+NOTICE:  AUDIT: SESSION,5,1,WRITE,UPDATE,TABLE,public.a1UPDATE a1 SET col = col;,<not logged>
+-- MISC, not logged.
+VACUUM a1;
+REINDEX TABLE a1;
+-- ROLE, logged.
+CREATE USER test_user;
+NOTICE:  AUDIT: SESSION,6,1,ROLE,CREATE ROLE,,CREATE USER test_user;,<not logged>
+GRANT ALL ON a1 To test_user;
+NOTICE:  AUDIT: SESSION,7,1,ROLE,GRANT,,GRANT ALL ON a1 To test_user;,<not logged>
+-- FUNCTION, logged.
+DO $$ BEGIN EXECUTE 'select ' || '* FROM a1'; END$$;
+NOTICE:  AUDIT: SESSION,8,1,FUNCTION,DO,,DO $$ BEGIN EXECUTE 'select ' || '* FROM a1'; END$$;,<not logged>
+NOTICE:  AUDIT: SESSION,8,2,READ,SELECT,TABLE,public.a1select * FROM a1,<not logged>
