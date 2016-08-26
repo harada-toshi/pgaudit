@@ -38,10 +38,21 @@
 #define OBJECT_TYPE_COMPOSITE_TYPE  "COMPOSITE TYPE"
 #define OBJECT_TYPE_FOREIGN_TABLE   "FOREIGN TABLE"
 #define OBJECT_TYPE_FUNCTION        "FUNCTION"
+#define OBJECT_TYPE_UNKNOWN			"UNKNOWN"
 
-#define OBJECT_TYPE_UNKNOWN         "UNKNOWN"
+/* These are for configuration parameter */
+#define OBJECT_TYPE_CONFIG_TABLE			"TABLE"
+#define OBJECT_TYPE_CONFIG_INDEX			"INDEX"
+#define OBJECT_TYPE_CONFIG_SEQUENCE			"SEQUENCE"
+#define OBJECT_TYPE_CONFIG_TOASTVALUE		"TOAST_VALUE"
+#define OBJECT_TYPE_CONFIG_VIEW				"VIEW"
+#define OBJECT_TYPE_CONFIG_MATVIEW			"MATERIALIZED_VIEW"
+#define OBJECT_TYPE_CONFIG_COMPOSITE_TYPE	"COMPOSITE_TYPE"
+#define OBJECT_TYPE_CONFIG_FOREIGN_TABLE	"FOREIGN_TABLE"
+#define OBJECT_TYPE_CONFIG_FUNCTION			"FUNCTION"
+#define OBJECT_TYPE_CONFIG_UNKNOWN			"UNKNOWN"
 
-/* BIts the object type for filtering object by object_type field */
+/* Bits the object type for filtering object by object_type field */
 #define LOG_OBJECT_TABLE			(1 << 0)
 #define LOG_OBJECT_INDEX			(1 << 1)
 #define LOG_OBJECT_SEQUENCE			(1 << 2)
@@ -51,7 +62,7 @@
 #define LOG_OBJECT_COMPOSITE_TYPE	(1 << 6)
 #define LOG_OBJECT_FOREIGN_TABLE	(1 << 7)
 #define LOG_OBJECT_FUNCTION			(1 << 8)
-#define LOG_ALL_OBJECT_TYPE 		0x1F
+#define LOG_OBJECT_UNKNOWN			(1 << 9)
 
 typedef struct AuditOutputConfig
 {
@@ -92,6 +103,7 @@ extern List	*ruleConfigs;
 
 /* extern functions */
 extern void processAuditConfigFile(char* filename);
+extern int objecttype_to_bitmap(const char *str);
 
 extern void pgaudit_set_options(char* name, char* value);
 extern void pgaudit_set_output_literal(char* name, char* value);

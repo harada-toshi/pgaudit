@@ -515,7 +515,7 @@ The Escapes.
 
 - %object_type
 
- The type of objects like as TABLE, INDEX, VIEW, etc.
+ The type of objects like as TABLE, INDEX, VIEW, MATERIALIZED_VIEW, SEQUENCE, COMPOSITE_TYPE, FOREIGN_TABLE, FUNCTION, TOAST_VALUE, UNKNOWN.
 
  Available for SELECT, DML and most DDL statements
 

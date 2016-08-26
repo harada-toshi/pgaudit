@@ -93,12 +93,11 @@ List	*ruleConfigs;
 
 static int	audit_parse_state = 0;
 
-/* Primiive functions */
+/* Primitive functions */
 static bool	str_to_bool(const char *str);
 static bool op_to_bool(const char *str);
 static pg_time_t str_to_timestamp(const char *str);
 static int class_to_bitmap(const char *str);
-static int objecttype_to_bitmap(const char *str);
 static char *audit_scanstr(const char *str);
 
 /* Function for configuration settings */
@@ -143,31 +142,47 @@ class_to_bitmap(const char *str)
 }
 
 /*
- * Return bitmap bit for LOG_OBJECT_XXX corresponding OBJECT_TYPE_XXX
+ * Return bitmap bit for LOG_OBJECT_XXX corresponding OBJECT_TYPE_XXXX.
  */
-static int
+int
 objecttype_to_bitmap(const char *str)
 {
 	int object_type;
 
-	if (pg_strcasecmp(str, OBJECT_TYPE_TABLE) == 0)
+	if (pg_strcasecmp(str, OBJECT_TYPE_TABLE) == 0 ||
+		pg_strcasecmp(str, OBJECT_TYPE_CONFIG_TABLE) == 0)
 		object_type = LOG_OBJECT_TABLE;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_INDEX) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_INDEX) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_INDEX) == 0)
 		object_type = LOG_OBJECT_INDEX;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_SEQUENCE) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_SEQUENCE) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_SEQUENCE) == 0)
 		object_type = LOG_OBJECT_SEQUENCE;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_TOASTVALUE) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_TOASTVALUE) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_TOASTVALUE) == 0)
 		object_type = LOG_OBJECT_TOASTVALUE;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_VIEW) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_VIEW) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_VIEW) == 0)
 		object_type = LOG_OBJECT_VIEW;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_MATVIEW) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_MATVIEW) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_MATVIEW) == 0)
 		object_type = LOG_OBJECT_MATVIEW;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_COMPOSITE_TYPE) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_COMPOSITE_TYPE) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_COMPOSITE_TYPE) ==0)
 		object_type = LOG_OBJECT_COMPOSITE_TYPE;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_FOREIGN_TABLE) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_FOREIGN_TABLE) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_FOREIGN_TABLE) ==0)
 		object_type = LOG_OBJECT_FOREIGN_TABLE;
-	else if (pg_strcasecmp(str, OBJECT_TYPE_FUNCTION) == 0)
+	else if (pg_strcasecmp(str, OBJECT_TYPE_FUNCTION) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_FUNCTION) == 0)
 		object_type = LOG_OBJECT_FUNCTION;
+	else if (pg_strcasecmp(str, OBJECT_TYPE_UNKNOWN) == 0 ||
+			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_UNKNOWN) == 0)
+		object_type = LOG_OBJECT_UNKNOWN;
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_CONFIG_FILE_ERROR),
+				 errmsg("invalid value \"%s\" for object_type", str)));
 
 	return object_type;
 }

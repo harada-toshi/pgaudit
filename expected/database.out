@@ -1,21 +1,44 @@
+-- Set up relations for regression test
 CREATE USER foo_user;
 CREATE USER bar_user;
 CREATE DATABASE foo;
 CREATE DATABASE bar;
--- Audit log must be logged
+\c foo
+CREATE FUNCTION test_func() RETURNS INT AS
+$$
+BEGIN
+    RETURN 0;
+END;
+$$ LANGUAGE plpgsql;
+NOTICE:  AUDIT: SESSION,1,1,DDL,CREATE FUNCTION,,"CREATE FUNCTION test_func() RETURNS INT AS
+$$
+BEGIN
+    RETURN 0;
+END;
+$$ LANGUAGE plpgsql;",<not logged>
+\c bar
+CREATE FUNCTION test_func() RETURNS INT AS
+$$
+BEGIN
+    RETURN 0;
+END;
+$$ LANGUAGE plpgsql;
+-- Test for database rule.
+-- SQL on 'foo' database must be logged.
+-- logged
 \c foo foo_user
-SELECT 1;
-NOTICE:  AUDIT: SESSION,1,1,READ,SELECT,,SELECT 1;,<not logged>
- ?column? 
-----------
-        1
+SELECT test_func();
+NOTICE:  AUDIT: SESSION,1,1,FUNCTION,EXECUTE,FUNCTION,public.test_funcSELECT test_func();,<not logged>
+ test_func 
+-----------
+         0
 (1 row)
 
--- Audit log must not be logged
+-- not logged
 \c bar foo_user
-SELECT 2;
- ?column? 
-----------
-        2
+SELECT test_func();
+ test_func 
+-----------
+         0
 (1 row)
 
