@@ -1,0 +1,38 @@
+
+before_install:
+  - psql --version
+  - sudo service postgresql stop
+  - sudo apt-get -y --purge remove postgresql libpq-dev libpq5 postgresql-client-common postgresql-common
+  - sudo rm -rf /var/lib/postgresql
+  - sudo apt-get update -qq
+  - sudo apt-get -y install bc libpam-dev libedit-dev
+  - git clone https://github.com/postgres/postgres.git postgres-dev
+  - cd postgres-dev
+  - export POSTGRES_HOME=/home/travis/build/ossc-db/pgaudit/pgsql/$PGVERSION
+  - echo 'export POSTGRES_HOME=/home/travis/build/ossc-db/pgaudit/pgsql/$PGVERSION' >> ~/.bashrc
+  - ./configure --prefix=$POSTGRES_HOME
+  - make -j 2
+  - make install
+  - echo 'export PATH=$PATH:$POSTGRES_HOME/bin' >> ~/.bashrc
+  - export PATH=$PATH:$POSTGRES_HOME/bin
+
+before_script:
+  - cd contrib
+  - git clone --branch=refactored https://github.com/ossc-db/pgaudit pgaudit
+  - cd pgaudit && git describe --alway
+  - make USE_PGXS=1
+  - make USE_PGXS=1 install 
+  
+language: cpp
+compiler:
+  - gcc
+
+script: make USE_PGXS=1 installcheck
+
+after_script:
+  - cat regression.diffs
+
+notifications:
+  email:
+    on_success: change
+    on_failure: always
