@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ossc-db/pgaudit.svg?branch=refactored)](https://travis-ci.org/ossc-db/pgaudit)
+
 # pgaudit/pgaudit
 ## PostgreSQL Audit Extension
 The PostgreSQL Audit extension (`pgaudit`) provides detailed session and/or object audit logging.
