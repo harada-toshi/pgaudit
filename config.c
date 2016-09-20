@@ -22,10 +22,10 @@ enum
 	AUDIT_BOOLEAN = 3,
 	AUDIT_OP = 5,
 	AUDIT_FIELD_OUTPUT = 6,
-	AUDIT_FIELD_OPTIONS = 7,
+	AUDIT_FIELD_OPTION = 7,
 	AUDIT_FIELD_RULE = 8,
 	AUDIT_SECTION_RULE = 9,
-	AUDIT_SECTION_OPTIONS = 10,
+	AUDIT_SECTION_OPTION = 10,
 	AUDIT_SECTION_OUTPUT = 11,
 	AUDIT_JUNK = 12,
 	AUDIT_EOL = 13,
@@ -324,8 +324,8 @@ validate_settings(char *field, char *op,char *value,
 		else if ((strcmp(field, "option") == 0))
 			outputConfig.option = value;
 	}
-	/* Validation for options section */
-	else if (audit_parse_state == AUDIT_SECTION_OPTIONS)
+	/* Validation for option section */
+	else if (audit_parse_state == AUDIT_SECTION_OPTION)
 	{
 		if ((strcmp(field, "role") == 0))
 			auditRole = value;
