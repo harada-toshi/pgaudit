@@ -289,6 +289,7 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 				 errhidecontext(true)));
 
 		stackItem->auditEvent.logged = true;
+		num++;
 	}
 
 }
