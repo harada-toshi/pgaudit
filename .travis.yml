@@ -6,10 +6,10 @@ before_install:
   - sudo rm -rf /var/lib/postgresql
   - sudo apt-get update -qq
   - sudo apt-get -y install bc libpam-dev libedit-dev
-  - git clone https://github.com/postgres/postgres.git postgres-dev
-  - cd postgres-dev
-  - export POSTGRES_HOME=/home/travis/build/ossc-db/pgaudit/pgsql/$PGVERSION
-  - echo 'export POSTGRES_HOME=/home/travis/build/ossc-db/pgaudit/pgsql/$PGVERSION' >> ~/.bashrc
+  - git clone https://github.com/postgres/postgres.git /home/travis/postgres-dev
+  - cd /home/travis/postgres-dev
+  - export POSTGRES_HOME=/home/travis/postgres-dev/pgsql/$PGVERSION
+  - echo 'export POSTGRES_HOME=/home/travis/postgres-dev/pgsql/$PGVERSION' >> ~/.bashrc
   - ./configure --prefix=$POSTGRES_HOME
   - make -j 2
   - make install
@@ -17,15 +17,18 @@ before_install:
   - export PATH=$PATH:$POSTGRES_HOME/bin
 
 before_script:
-  - cd contrib
-  - git clone --branch=refactored https://github.com/ossc-db/pgaudit pgaudit
-  - cd pgaudit && git describe --alway
+  - mv /home/travis/build/ossc-db/pgaudit /home/travis/postgres-dev/contrib
+  - cd /home/travis/postgres-dev/contrib/pgaudit && git describe --alway
   - make USE_PGXS=1
   - make USE_PGXS=1 install 
   
 language: cpp
 compiler:
   - gcc
+
+branches:
+  only:
+  - refactored
 
 script: make USE_PGXS=1 installcheck
 
