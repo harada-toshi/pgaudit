@@ -127,8 +127,8 @@ void processAuditConfigFile(char* filename)
 
 				if (audit_parse_state == AUDIT_SECTION_RULE)
 					state_string = "rule section";
-				else if (audit_parse_state == AUDIT_SECTION_OPTIONS)
-					state_string = "options section";
+				else if (audit_parse_state == AUDIT_SECTION_OPTION)
+					state_string = "option section";
 				else
 					state_string = "output section";
 
