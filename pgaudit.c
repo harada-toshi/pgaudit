@@ -42,6 +42,11 @@
 #include "pgaudit.h"
 #include "config.h"
 
+/* for GUC check */
+extern bool Log_connections;
+extern bool Log_disconnections;
+extern bool log_replication_commands;;
+
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
@@ -1615,6 +1620,14 @@ _PG_init(void)
     if (!process_shared_preload_libraries_in_progress)
         ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
+
+	/* 
+	 * If log_connections, log_disconnections, log_replication_commands
+	 * parameter is off, pgaudit is not executed.
+	 */
+	if ( !Log_connections || !Log_disconnections || !log_replication_commands )
+		ereport(ERROR, (
+			errmsg("If log_connections, log_disconnections, log_replication_commands parameter is off, pgaudit is not executed.")));
 
 		/* Define pgaudit.confg_file */
 	DefineCustomStringVariable(
