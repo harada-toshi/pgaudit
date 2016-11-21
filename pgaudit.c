@@ -1622,12 +1622,12 @@ _PG_init(void)
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
 
 	/* 
-	 * If log_connections, log_disconnections, log_replication_commands
-	 * parameter is off, pgaudit is not executed.
+	 * pgaudit must be set log_connections, log_disconnections 
+	 * and log_replication_commands.
 	 */
-	if ( !Log_connections || !Log_disconnections || !log_replication_commands )
-		ereport(ERROR, (
-			errmsg("If log_connections, log_disconnections, log_replication_commands parameter is off, pgaudit is not executed.")));
+    if ( !Log_connections || !Log_disconnections || !log_replication_commands )
+        ereport(ERROR, (
+                errmsg("pgaudit must be set log_connections, log_disconnections and log_replication_commands.")));
 
 		/* Define pgaudit.confg_file */
 	DefineCustomStringVariable(
