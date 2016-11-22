@@ -8,6 +8,8 @@ before_install:
   - sudo apt-get -y install bc libpam-dev libedit-dev
   - git clone https://github.com/postgres/postgres.git /home/travis/postgres-dev
   - cd /home/travis/postgres-dev
+  - git fetch origin REL9_6_STABLE
+  - git checkout -b REL9_6_STABLE origin/REL9_6_STABLE
   - export POSTGRES_HOME=/home/travis/postgres-dev/pgsql/$PGVERSION
   - echo 'export POSTGRES_HOME=/home/travis/postgres-dev/pgsql/$PGVERSION' >> ~/.bashrc
   - ./configure --prefix=$POSTGRES_HOME
