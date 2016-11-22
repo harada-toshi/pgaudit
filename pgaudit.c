@@ -221,6 +221,7 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 
 		if (!stackItem->auditEvent.statementLogged || !auditLogStatementOnce)
 		{
+			appendStringInfoCharMacro(&auditStr, ',');
 			append_valid_csv(&auditStr, stackItem->auditEvent.commandText);
 
 			appendStringInfoCharMacro(&auditStr, ',');
@@ -274,9 +275,12 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 			stackItem->auditEvent.statementLogged = true;
 		}
 		else
+		{
 			/* we were asked to not log it */
+			appendStringInfoCharMacro(&auditStr, ',');
 			appendStringInfoString(&auditStr,
 								   "<previously logged>,<previously logged>");
+		}
 
 		/* Emit the audit log */
 		AUDIT_EREPORT(auditLogLevel,
