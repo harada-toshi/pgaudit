@@ -279,7 +279,7 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 								   "<previously logged>,<previously logged>");
 
 		/* Emit the audit log */
-		ereport(auditLogLevel,
+		AUDIT_EREPORT(auditLogLevel,
 				(errmsg("AUDIT: SESSION," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
 						stackItem->auditEvent.statementId,
 						stackItem->auditEvent.substatementId,
@@ -724,7 +724,7 @@ log_audit_event(AuditEventStackItem *stackItem)
      * translatability, but we currently haven't got translation support in
      * pgaudit anyway.
      */
-    ereport(auditLogLevel,
+    AUDIT_EREPORT(auditLogLevel,
             (errmsg("AUDIT: OBJECT," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
                     stackItem->auditEvent.statementId,
                     stackItem->auditEvent.substatementId,
