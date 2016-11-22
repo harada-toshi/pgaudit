@@ -1621,8 +1621,8 @@ _PG_init(void)
         ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
 
-	/* 
-	 * pgaudit must be set log_connections, log_disconnections 
+	/*
+	 * pgaudit must be set log_connections, log_disconnections
 	 * and log_replication_commands.
 	 */
     if ( !Log_connections || !Log_disconnections || !log_replication_commands )
