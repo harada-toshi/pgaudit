@@ -1626,7 +1626,7 @@ _PG_init(void)
 	 * and log_replication_commands.
 	 */
     if ( !Log_connections || !Log_disconnections || !log_replication_commands )
-        ereport(ERROR, (
+        ereport(ERROR, (errcode(ERRCODE_CONFIG_FILE_ERROR),
                 errmsg("pgaudit must be set log_connections, log_disconnections and log_replication_commands.")));
 
 		/* Define pgaudit.confg_file */
@@ -1661,7 +1661,8 @@ _PG_init(void)
 
 	/* Parse audit configuration */
 	if (config_file == NULL)
-		ereport(ERROR, (errmsg("\"pgaudit.config_file\" must be specify when pgaudit is loaded")));
+            ereport(ERROR, (errcode(ERRCODE_CONFIG_FILE_ERROR),
+		errmsg("\"pgaudit.config_file\" must be specify when pgaudit is loaded")));
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
 	ruleConfigs = NULL;
