@@ -183,7 +183,7 @@ void processAuditConfigFile(char* filename)
 	if ((fclose(fp) != 0))
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_SUCCESSFUL_COMPLETION),
+				(errcode(errcode_for_file_access()),
 				 errmsg("could not close file \"%s\"", filename)));
 	}
 }

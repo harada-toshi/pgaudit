@@ -42,6 +42,11 @@
 #include "pgaudit.h"
 #include "config.h"
 
+/* for GUC check */
+extern bool Log_connections;
+extern bool Log_disconnections;
+extern bool log_replication_commands;;
+
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
@@ -1620,6 +1625,14 @@ _PG_init(void)
         ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                 errmsg("pgaudit must be loaded via shared_preload_libraries")));
 
+	/*
+	 * pgaudit must be set log_connections, log_disconnections
+	 * and log_replication_commands.
+	 */
+    if ( !Log_connections || !Log_disconnections || !log_replication_commands )
+        ereport(ERROR, (errcode(ERRCODE_CONFIG_FILE_ERROR),
+                errmsg("pgaudit must be set log_connections, log_disconnections and log_replication_commands.")));
+
 		/* Define pgaudit.confg_file */
 	DefineCustomStringVariable(
 		"pgaudit.config_file",
@@ -1652,7 +1665,8 @@ _PG_init(void)
 
 	/* Parse audit configuration */
 	if (config_file == NULL)
-		ereport(ERROR, (errmsg("\"pgaudit.config_file\" must be specify when pgaudit is loaded")));
+            ereport(ERROR, (errcode(ERRCODE_CONFIG_FILE_ERROR),
+		errmsg("\"pgaudit.config_file\" must be specify when pgaudit is loaded")));
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
 	ruleConfigs = NULL;

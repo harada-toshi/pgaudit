@@ -633,16 +633,7 @@ Specifies which database elements in the statements will be logged. Possible val
 
  `Session audit logging` logs a log for a SQL (Success or Error) for simple SQL, but sometimes, especially for complex SQL, logs some of logs (for each parts and an Error).
 
-- show command always shows ON
-
- pgaudit has influences to 'show command' for GUC following;
-
- - log_connections
- - log_disconnections
- - log_replication_commands
-
- With pgaudit 'show command' always shows them as ON, even if you set them to OFF and PpstgreSQL does not output the log entries to servelog.
-
+- pgaudit must be set log\_connections, log\_disconnections and log\_replication\_commands is on. If all these parameters are not on, the PostgreSQL server will not start.
 
 ## Authors
 

@@ -181,7 +181,7 @@ objecttype_to_bitmap(const char *str)
 		object_type = LOG_OBJECT_UNKNOWN;
 	else
 		ereport(ERROR,
-				(errcode(ERRCODE_CONFIG_FILE_ERROR),
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("invalid value \"%s\" for object_type", str)));
 
 	return object_type;
