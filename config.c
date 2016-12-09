@@ -367,7 +367,10 @@ validate_settings(char *field, char *op,char *value,
 					/* The value is an CSV format */
 					if (!SplitIdentifierString(value, ',', &value_list))
 					{
-						/* XXX : error */
+						ereport(ERROR,
+								(errcode(ERRCODE_CONFIG_FILE_ERROR),
+								 errmsg("invalid format parameter \"%s\" of field \"%s\ in rule section",
+										value, field)));
 					}
 
 					list_len = list_length(value_list);
