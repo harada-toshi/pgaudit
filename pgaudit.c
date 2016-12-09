@@ -303,30 +303,33 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 
 }
 
-/* XXX : Debug functio which will be removed */
+/* Show all audit configuration */
 static void
 print_config(void)
 {
 	ListCell *cell;
+	int n_rule = 0;
 
-	fprintf(stderr, "log_catalog = %d\n", auditLogCatalog);
-	fprintf(stderr, "log_level_string = %s\n", auditLogLevelString);
-	fprintf(stderr, "log_level = %d\n", auditLogLevel);
-	fprintf(stderr, "log_parameter = %d\n", auditLogParameter);
-	fprintf(stderr, "log_statement_once = %d\n", auditLogStatementOnce);
-	fprintf(stderr, "role = %s\n", auditRole);
-	fprintf(stderr, "logger = %s\n", outputConfig.logger);
-	fprintf(stderr, "facility = %s\n", outputConfig.facility);
-	fprintf(stderr, "priority = %s\n", outputConfig.priority);
-	fprintf(stderr, "ident = %s\n", outputConfig.ident);
-	fprintf(stderr, "option = %s\n", outputConfig.option);
-	fprintf(stderr, "pathlog = %s\n", outputConfig.pathlog);
+	AUDIT_EREPORT(LOG, (errmsg("log_catalog = %d", auditLogCatalog)));
+	AUDIT_EREPORT(LOG, (errmsg("log_level_string = %s", auditLogLevelString)));
+	AUDIT_EREPORT(LOG, (errmsg("log_level = %d", auditLogLevel)));
+	AUDIT_EREPORT(LOG, (errmsg("log_parameter = %d", auditLogParameter)));
+	AUDIT_EREPORT(LOG, (errmsg("log_statement_once = %d", auditLogStatementOnce)));
+	AUDIT_EREPORT(LOG, (errmsg("role = %s", auditRole)));
+	AUDIT_EREPORT(LOG, (errmsg("logger = %s", outputConfig.logger)));
+	AUDIT_EREPORT(LOG, (errmsg("facility = %s", outputConfig.facility)));
+	AUDIT_EREPORT(LOG, (errmsg("priority = %s", outputConfig.priority)));
+	AUDIT_EREPORT(LOG, (errmsg("ident = %s", outputConfig.ident)));
+	AUDIT_EREPORT(LOG, (errmsg("option = %s", outputConfig.option)));
+	AUDIT_EREPORT(LOG, (errmsg("pathlog = %s", outputConfig.pathlog)));
 
 	foreach(cell, ruleConfigs)
 	{
 		AuditRuleConfig *rconf = lfirst(cell);
 		int j;
-		fprintf(stderr, "Format = %s\n", rconf->format);
+
+		AUDIT_EREPORT(LOG, (errmsg("Rule %d", n_rule)));
+		n_rule++;
 
 		for (j = 0; j < AUDIT_NUM_RULES; j++)
 		{
@@ -343,10 +346,10 @@ print_config(void)
 				for (i = 0; i < num; i++)
 				{
 					int val = ((int *)rule.values)[i];
-					fprintf(stderr, "    INT %s %s %d\n",
+					AUDIT_EREPORT(LOG, (errmsg("    INT %s %s %d",
 							rule.field,
 							rule.eq ? "=" : "!=",
-							val);
+											   val)));
 				}
 			}
 			else if (isStringRule(rule))
@@ -357,20 +360,20 @@ print_config(void)
 				for (i = 0; i < num; i++)
 				{
 					char *val = ((char **)rule.values)[i];
-					fprintf(stderr, "    STR %s %s %s\n",
+					AUDIT_EREPORT(LOG, (errmsg("    STR %s %s %s",
 							rule.field,
 							rule.eq ? "=" : "!=",
-							val);
+											   val)));
 				}
 			}
 			else if (isBitmapRule(rule))
 			{
 				int val = *((int *)rule.values);
 
-				fprintf(stderr, "    BMP %s %s %d\n",
+				AUDIT_EREPORT(LOG, (errmsg("    BMP %s %s %d",
 						rule.field,
 						rule.eq ? "=" : "!=",
-						val);
+										   val)));
 			}
 			else
 			{
@@ -379,10 +382,10 @@ print_config(void)
 				for (i = 0; i < num; i++)
 				{
 					pg_time_t val = ((pg_time_t *)rule.values)[i];
-					fprintf(stderr, "    TMS %s %s %ld\n",
+					AUDIT_EREPORT(LOG, (errmsg("    TMS %s %s %ld",
 							rule.field,
 							rule.eq ? "=" : "!=",
-							val);
+											   val)));
 				}
 			}
 		}
@@ -1673,7 +1676,7 @@ _PG_init(void)
 
 	/* Parse configuration file specified by pgaudit.config_file */
 	processAuditConfigFile(config_file);
-	print_config(); /* XXX : debug output will be removed */
+	print_config();
 
 	MemoryContextSwitchTo(old_ctx);
 
