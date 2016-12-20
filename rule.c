@@ -6,6 +6,8 @@
  */
 
 #include "postgres.h"
+
+#include "access/xact.h"
 #include "miscadmin.h"
 #include "libpq/auth.h"
 
@@ -14,7 +16,7 @@
 static bool apply_one_rule(void *value, AuditRule rule);
 static bool apply_string_rule(char *value, AuditRule rule);
 static bool apply_integer_rule(int value, AuditRule rule);
-static bool apply_timestamp_rule(AuditRule rule);
+static bool apply_timestamp_rule(pg_time_t value, AuditRule rule);
 static bool apply_bitmap_rule(int value, AuditRule rule);
 
 /* Classify the statement using log stmt level and the command tag */
@@ -231,6 +233,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	char *database_name = NULL;
 	char *object_id = NULL;
 	int	object_type = 0;
+	pg_time_t audit_ts_of_day;
 
 	if (stackItem != NULL)
 	{
@@ -240,6 +243,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 			"" : stackItem->auditEvent.objectName;
 		object_type = (stackItem->auditEvent.objectType == NULL) ?
 			0 : objecttype_to_bitmap(stackItem->auditEvent.objectType);
+		audit_ts_of_day = auditTimestampOfDay;
 	}
 	else
 	{
@@ -264,7 +268,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 			 * When we're about to log related to table operation such as read,
 			 * write and misc, we apply object_id and object_type rule in addition.
 			 */
-			if (apply_one_rule(NULL, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
+			if (apply_one_rule(&audit_ts_of_day, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
 				apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
 				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
@@ -333,7 +337,10 @@ apply_one_rule(void *value, AuditRule rule)
 		return apply_string_rule(val, rule);
 	}
 	else if (isTimestampRule(rule))
-		return apply_timestamp_rule(rule);
+	{
+		pg_time_t ts = *(pg_time_t *) value;
+		return apply_timestamp_rule(ts, rule);
+	}
 	else if (isBitmapRule(rule))
 	{
 		int *val = (int *)value;
@@ -380,10 +387,41 @@ apply_integer_rule(int value, AuditRule rule)
  * Check if current timestamp is within the range of rule.
  */
 static bool
-apply_timestamp_rule(AuditRule rule)
+apply_timestamp_rule(pg_time_t value, AuditRule rule)
 {
-	/* XXX : we should complete this function */
-	return true;
+	int i;
+	pg_time_t *ts_ptr;
+
+	/* Return true if this rule is not defined */
+	if (rule.values == NULL)
+		return true;
+
+	ts_ptr = (pg_time_t *) rule.values;
+	for (i = 0; i < rule.nval; i += 2)
+	{
+		pg_time_t begin = ts_ptr[i];
+		pg_time_t end = ts_ptr[i+1];
+
+		/*
+		 * If 'eq' is true, we need to emit audit log if at least
+		 * one timestamp rule matched. On the other hand, if 'eq'
+		 * false then we need to emit audit log only when all timestamp
+		 * rule aren't matched.
+		 */
+		if (begin <= value && value <= end)
+		{
+			if (rule.eq)
+				return true;
+			else
+				return false;
+		}
+	}
+
+	/*
+	 * There was no rule matched if 'eq' is true so return false.
+	 * Or there were no rule matched if 'eq' if false so return true.
+	 */
+	return (rule.eq) ? false : true;
 }
 
 /*

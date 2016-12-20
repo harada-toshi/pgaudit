@@ -369,7 +369,7 @@ validate_settings(char *field, char *op,char *value,
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_CONFIG_FILE_ERROR),
-								 errmsg("invalid format parameter \"%s\" of field \"%s\ in rule section",
+								 errmsg("invalid format parameter \"%s\" of field \"%s\" in rule section",
 										value, field)));
 					}
 

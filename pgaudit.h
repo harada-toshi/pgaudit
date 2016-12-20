@@ -64,4 +64,5 @@ typedef struct AuditEventStackItem
     MemoryContextCallback contextCallback;
 } AuditEventStackItem;
 
+extern pg_time_t auditTimestampOfDay;
 #endif

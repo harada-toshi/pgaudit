@@ -146,6 +146,10 @@ static int64 stackTotal = 0;
 
 static bool statementLogged = false;
 
+/* Functions and variable for audit timestamp stuff */
+pg_time_t auditTimestampOfDay;
+static void setAuditTimestampOfDay(void);
+
 /*
  * Emit the SESSION log for event from emit_log_hook. This routine is
  * used for logging of connection, disconnection, replication command etc.
@@ -165,6 +169,9 @@ pgaudit_emit_log_hook(ErrorData *edata)
 		/* If we are not interested in this message, skip routine */
 		if (className != NULL)
 		{
+			/* Set audit logging timestamp of day */
+			setAuditTimestampOfDay();
+
 			/*
 			 * Only log the statement if the edata matches to all rules of
 			 * multiple rule secion.
@@ -603,6 +610,9 @@ log_audit_event(AuditEventStackItem *stackItem)
 
 	/* Get class and className using stackItem */
 	className = classify_statement_class(stackItem, &class);
+
+	/* Set audit logging timestamp of day */
+	setAuditTimestampOfDay();
 
 	/*----------
      * Only log the statement if:
@@ -1608,6 +1618,28 @@ pgaudit_sql_drop(PG_FUNCTION_ARGS)
     internalStatement = false;
 
     PG_RETURN_NULL();
+}
+
+/*
+ * Set auditTimestampOfDay. This function is called at begining of applying
+ * rule and same used timestamp value will be used for logging.
+ */
+static void
+setAuditTimestampOfDay(void)
+{
+	struct timeval tv;
+	pg_time_t unix_time;
+	struct pg_tm *local_time;
+
+	/* get the current time */
+	gettimeofday(&tv, NULL);
+
+	unix_time = (pg_time_t) tv.tv_sec;
+
+	local_time = pg_localtime(&unix_time, log_timezone);
+
+	auditTimestampOfDay = local_time->tm_hour * 3600 + local_time->tm_min * 60 +
+		local_time->tm_sec;
 }
 
 /*

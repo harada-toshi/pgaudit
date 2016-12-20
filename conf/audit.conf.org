@@ -13,3 +13,13 @@ object_type = 'TABLE, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
 database = 'foobaafoobaa'
 class = 'DDL, READ, WRITE, MISC, ROLE, FUNCTION'
 object_type = 'TABLE, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
+
+[rule] # test for timestamp equality
+object_id = 'public.timestamp_test1'
+class = 'READ'
+timestamp = '##BEGIN##-##END##'
+
+[rule] # test for timestamp not equality
+object_id = 'public.timestamp_test2'
+class = 'READ'
+timestamp != '##BEGIN##-##END##'
