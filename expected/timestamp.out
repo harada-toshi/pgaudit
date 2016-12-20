@@ -1,0 +1,36 @@
+-- Create test table
+CREATE TABLE timestamp_test1(col timestamp);
+CREATE TABLE timestamp_test2(col timestamp);
+-- Check if the audit logging for timestamp_test1 is logged and
+-- the audit logging for timestamp_test2 is NOT logged now.
+SELECT * FROM timestamp_test1;
+NOTICE:  AUDIT: SESSION,1,1,READ,SELECT,TABLE,public.timestamp_test1,SELECT * FROM timestamp_test1;,<not logged>
+ col 
+-----
+(0 rows)
+
+SELECT * FROM timestamp_test2;
+ col 
+-----
+(0 rows)
+
+-- Wait until past the timestamp range.
+SELECT pg_sleep(60);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+-- Check if the audit logging for timestamp_test1 is NOT logged and
+-- the audit logging for timestamp_test2 is logged now.
+SELECT * FROM timestamp_test1;
+ col 
+-----
+(0 rows)
+
+SELECT * FROM timestamp_test2;
+NOTICE:  AUDIT: SESSION,2,1,READ,SELECT,TABLE,public.timestamp_test2,SELECT * FROM timestamp_test2;,<not logged>
+ col 
+-----
+(0 rows)
+
