@@ -90,6 +90,7 @@ char *auditRole = "";
 /* Global variable for output and rule sections */
 AuditOutputConfig outputConfig;
 List	*ruleConfigs;
+bool	logForTest = false;
 
 static int	audit_parse_state = 0;
 
@@ -310,9 +311,7 @@ validate_settings(char *field, char *op,char *value,
 		if ((strcmp(field, "logger") == 0))
 			outputConfig.logger = value;
 		else if ((strcmp(field, "level") == 0))
-		{
 			outputConfig.level = value;
-		}
 		else if ((strcmp(field, "pathlog") == 0))
 			outputConfig.pathlog = value;
 		else if ((strcmp(field, "facility") == 0))
@@ -335,12 +334,13 @@ validate_settings(char *field, char *op,char *value,
 			auditLogParameter = str_to_bool(value);
 		else if ((strcmp(field, "log_statement_once") == 0))
 			auditLogStatementOnce = str_to_bool(value);
+		else if ((strcmp(field, "log_for_test") == 0))
+			logForTest = str_to_bool(value);
 		else if ((strcmp(field, "log_level") == 0))
 		{
 			auditLogLevelString = value;
 			assign_pgaudit_log_level(auditLogLevelString);
 		}
-
 	}
 	/* Validation for rule section */
 	else if (audit_parse_state == AUDIT_SECTION_RULE)

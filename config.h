@@ -97,6 +97,7 @@ extern int auditLogLevel;
 extern bool auditLogParameter;
 extern bool auditLogStatementOnce;
 extern char *auditRole;
+extern bool logForTest;
 
 extern AuditOutputConfig outputConfig;
 extern List	*ruleConfigs;

@@ -28,6 +28,7 @@
 #include "miscadmin.h"
 #include "libpq/auth.h"
 #include "nodes/nodes.h"
+#include "storage/proc.h"
 #include "tcop/utility.h"
 #include "tcop/deparse_utility.h"
 #include "utils/acl.h"
@@ -35,6 +36,7 @@
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/ps_status.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
@@ -148,7 +150,12 @@ static bool statementLogged = false;
 
 /* Functions and variable for audit timestamp stuff */
 pg_time_t auditTimestampOfDay;
-static void setAuditTimestampOfDay(void);
+pg_time_t auditTimestamp;
+static void setAuditTimestamp(void);
+
+static void create_audit_log_string(StringInfo buf, ErrorData *edata,
+									AuditEventStackItem *stackItem,
+									const char *className);
 
 /*
  * Emit the SESSION log for event from emit_log_hook. This routine is
@@ -169,8 +176,12 @@ pgaudit_emit_log_hook(ErrorData *edata)
 		/* If we are not interested in this message, skip routine */
 		if (className != NULL)
 		{
+			StringInfoData auditStr;
+			ListCell *cell;
+			int		num = 0;
+
 			/* Set audit logging timestamp of day */
-			setAuditTimestampOfDay();
+			setAuditTimestamp();
 
 			/*
 			 * Only log the statement if the edata matches to all rules of
@@ -179,19 +190,26 @@ pgaudit_emit_log_hook(ErrorData *edata)
 			if (!apply_all_rules(NULL, edata, class, className, valid_rules))
 				return;
 
-			/*
-			 * XXX : We should separate function for emitting log to common
-			 * function with log_audit_event.
-			 *
-			 * XXX : We should support output format specified by 'format' or
-			 * emit the fixed format log.
-			 */
-			AUDIT_EREPORT(auditLogLevel,
-					(errmsg("AUDIT: SESSION,,,%s,%s",
-							className,
-							edata->message),
-					 errhidestmt(true),
-					 errhidecontext(true)));
+			foreach(cell, ruleConfigs)
+			{
+				/* If this event does not match to current rule, ignore it */
+				if (!valid_rules[num++])
+					continue;
+
+				initStringInfo(&auditStr);
+				create_audit_log_string(&auditStr, edata, NULL, NULL);
+
+				/*
+				 * XXX : We should support output format specified by 'format' or
+				 * emit the fixed format log.
+				 */
+				AUDIT_EREPORT(auditLogLevel,
+							  (errmsg("AUDIT: SESSION,,,%s,%s",
+									  className,
+									  auditStr.data),
+							   errhidestmt(true),
+							   errhidecontext(true)));
+			}
 		}
 	}
 
@@ -213,30 +231,121 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 
 	foreach(cell, ruleConfigs)
 	{
-		//AuditRuleConfig *rconf = lfirst(cell); /* used for format */
-
 		/* If this event does not match to current rule, ignore it */
-		if (!valid_rules[num])
-		{
-			num++;
+		if (!valid_rules[num++])
 			continue;
-		}
 
 		initStringInfo(&auditStr);
-		append_valid_csv(&auditStr, stackItem->auditEvent.command);
+		create_audit_log_string(&auditStr, NULL, stackItem, className);
 
-		appendStringInfoCharMacro(&auditStr, ',');
-		append_valid_csv(&auditStr, stackItem->auditEvent.objectType);
+		/* Emit the audit log */
+		AUDIT_EREPORT(auditLogLevel,
+				(errmsg("AUDIT: SESSION," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
+						stackItem->auditEvent.statementId,
+						stackItem->auditEvent.substatementId,
+						className,
+						auditStr.data),
+				 errhidestmt(true),
+				 errhidecontext(true)));
 
-		appendStringInfoCharMacro(&auditStr, ',');
-		append_valid_csv(&auditStr, stackItem->auditEvent.objectName);
+		stackItem->auditEvent.logged = true;
+	}
+}
+
+/*
+ * Craft the audit log message string. Retrun the fixed format audit log
+ * string data that contains all information for the audit.
+ *
+ * For regression test, since timestamp of each audit log can be changed
+ * whenever execute, so if logForTest is true then we don't write such
+ * information to buf intentionally.
+ *
+ * XXX : Since this routine could be called high frequently, it could be
+ * bottle neck. One optimizatin idea is to change this function so that
+ * it re-use the static data in one query such as database name, remote
+ * host.
+*/
+static void
+create_audit_log_string(StringInfo buf, ErrorData *edata,
+						AuditEventStackItem *stackItem,
+						const char *className)
+{
+	char		strbuf[128];
+	char		separator = ',';
+
+	/* timestamp(%t) */
+	if (!logForTest)
+	{
+		pg_strftime(strbuf, sizeof(strbuf),
+					"%Y-%m-%d %H:%M:%S %Z",
+					pg_localtime(&auditTimestamp, log_timezone));
+		appendStringInfoString(buf, strbuf);
+	}
+	appendStringInfoChar(buf, separator);
+
+	/* database name(%d) */
+	if (MyProcPort && MyProcPort->database_name)
+		appendStringInfoString(buf, MyProcPort->database_name);
+	appendStringInfoChar(buf, separator);
+
+	/* remote host(%h) */
+	if (MyProcPort && MyProcPort->remote_host)
+		appendStringInfoString(buf, MyProcPort->remote_host);
+	appendStringInfoChar(buf, separator);
+
+	/* applicaton name(%a) */
+	if (MyProcPort)
+	{
+		const char *appname = application_name;
+		if (appname == NULL || *appname == '\0')
+			appname = "[unknown]";
+		appendStringInfoString(buf, appname);
+	}
+	appendStringInfoChar(buf, separator);
+
+	/* virtual transaction id (%v) */
+	if (!logForTest &&
+		MyProc != NULL && MyProc->backendId != InvalidBackendId)
+	{
+		char strbuf[128];
+
+		snprintf(strbuf, sizeof(strbuf) - 1, "%d/%u",
+				 MyProc->backendId, MyProc->lxid);
+		appendStringInfoString(buf, strbuf);
+	}
+	appendStringInfoChar(buf, separator);
+
+	/* transaction id (%x) */
+	if (!logForTest)
+		appendStringInfo(buf, "%d", GetTopTransactionIdIfAny());
+	appendStringInfoChar(buf, separator);
+
+	/* error state (%e) */
+	if (edata != NULL)
+		appendStringInfoString(buf, unpack_sql_state(edata->sqlerrcode));
+	appendStringInfoChar(buf, separator);
+
+	/* error message */
+	if (edata != NULL)
+		appendStringInfoString(buf, edata->message);
+	appendStringInfoChar(buf, separator);
+
+	if (stackItem != NULL)
+	{
+		append_valid_csv(buf, stackItem->auditEvent.command);
+		appendStringInfoChar(buf, separator);
+
+		append_valid_csv(buf, stackItem->auditEvent.objectType);
+		appendStringInfoChar(buf, separator);
+
+		append_valid_csv(buf, stackItem->auditEvent.objectName);
 
 		if (!stackItem->auditEvent.statementLogged || !auditLogStatementOnce)
 		{
-			appendStringInfoCharMacro(&auditStr, ',');
-			append_valid_csv(&auditStr, stackItem->auditEvent.commandText);
+			appendStringInfoChar(buf, separator);
 
-			appendStringInfoCharMacro(&auditStr, ',');
+			append_valid_csv(buf, stackItem->auditEvent.commandText);
+			appendStringInfoChar(buf, separator);
 
 			/* Handle parameter logging, if enabled. */
 			if (auditLogParameter)
@@ -262,7 +371,7 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 
 					/* Add a comma for each param */
 					if (paramIdx != 0)
-						appendStringInfoCharMacro(&paramStrResult, ',');
+						appendStringInfoChar(buf, separator);
 
 					/* Skip if null or if oid is invalid */
 					if (prm->isnull || !OidIsValid(prm->ptype))
@@ -277,37 +386,27 @@ emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 				}
 
 				if (numParams == 0)
-					appendStringInfoString(&auditStr, "<none>");
+					appendStringInfoString(buf, "<none>");
 				else
-					append_valid_csv(&auditStr, paramStrResult.data);
+					append_valid_csv(buf, paramStrResult.data);
 			}
 			else
-				appendStringInfoString(&auditStr, "<not logged>");
+				appendStringInfoString(buf, "<not logged>");
 
 			stackItem->auditEvent.statementLogged = true;
 		}
 		else
 		{
 			/* we were asked to not log it */
-			appendStringInfoCharMacro(&auditStr, ',');
-			appendStringInfoString(&auditStr,
+			appendStringInfoChar(buf, separator);
+
+			appendStringInfoString(buf,
 								   "<previously logged>,<previously logged>");
 		}
-
-		/* Emit the audit log */
-		AUDIT_EREPORT(auditLogLevel,
-				(errmsg("AUDIT: SESSION," INT64_FORMAT "," INT64_FORMAT ",%s,%s",
-						stackItem->auditEvent.statementId,
-						stackItem->auditEvent.substatementId,
-						className,
-						auditStr.data),
-				 errhidestmt(true),
-				 errhidecontext(true)));
-
-		stackItem->auditEvent.logged = true;
-		num++;
 	}
-
+	else
+		/* padding fr <command id>,<object type>,<object id>,<SQL>,<parameter>*/
+		appendStringInfoString(buf, ",,,,");
 }
 
 /* Show all audit configuration */
@@ -322,6 +421,7 @@ print_config(void)
 	AUDIT_EREPORT(LOG, (errmsg("log_level = %d", auditLogLevel)));
 	AUDIT_EREPORT(LOG, (errmsg("log_parameter = %d", auditLogParameter)));
 	AUDIT_EREPORT(LOG, (errmsg("log_statement_once = %d", auditLogStatementOnce)));
+	AUDIT_EREPORT(LOG, (errmsg("log_for_test = %d", logForTest)));
 	AUDIT_EREPORT(LOG, (errmsg("role = %s", auditRole)));
 	AUDIT_EREPORT(LOG, (errmsg("logger = %s", outputConfig.logger)));
 	AUDIT_EREPORT(LOG, (errmsg("facility = %s", outputConfig.facility)));
@@ -612,7 +712,7 @@ log_audit_event(AuditEventStackItem *stackItem)
 	className = classify_statement_class(stackItem, &class);
 
 	/* Set audit logging timestamp of day */
-	setAuditTimestampOfDay();
+	setAuditTimestamp();
 
 	/*----------
      * Only log the statement if:
@@ -652,7 +752,7 @@ log_audit_event(AuditEventStackItem *stackItem)
     }
 
 	/*
-	 * If we are going to emit the SESSION log, granted is set false.
+	 * When we are going to emit the SESSION log, granted is set false.
 	 * In this case, we emit the log according to defined rules
 	 */
 	if (stackItem->auditEvent.granted == false)
@@ -1621,11 +1721,11 @@ pgaudit_sql_drop(PG_FUNCTION_ARGS)
 }
 
 /*
- * Set auditTimestampOfDay. This function is called at begining of applying
+ * Set auditTimestampOfDay and auditTimestamp. This function is called at begining of applying
  * rule and same used timestamp value will be used for logging.
  */
 static void
-setAuditTimestampOfDay(void)
+setAuditTimestamp(void)
 {
 	struct timeval tv;
 	pg_time_t unix_time;
@@ -1640,6 +1740,7 @@ setAuditTimestampOfDay(void)
 
 	auditTimestampOfDay = local_time->tm_hour * 3600 + local_time->tm_min * 60 +
 		local_time->tm_sec;
+	auditTimestamp = unix_time;
 }
 
 /*

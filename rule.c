@@ -248,6 +248,9 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	else
 	{
 		/* XXX : prepare information for session "edata" logging */
+		if (MyProcPort != NULL && MyProcPort->database_name != NULL)
+			database_name = MyProcPort->database_name;
+		audit_ts_of_day = auditTimestampOfDay;
 	}
 
 	/*
@@ -292,7 +295,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 			 *
 			 * XXX : Need to consider how we process AUDIT_RULE_COMMAND_TAG.
 			 */
-			if (apply_one_rule(NULL, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
+			if (apply_one_rule(&audit_ts_of_day, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
 				apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
 				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&

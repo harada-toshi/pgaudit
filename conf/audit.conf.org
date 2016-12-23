@@ -3,6 +3,7 @@ logger= 'serverlog'
 
 [option]
 log_level = 'NOTICE'
+log_for_test = on
 
 [rule] # test for database and class
 database = 'foo'
