@@ -45,7 +45,7 @@ struct AuditRule rules_template[] =
 	{"class", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
 	{"command_tag", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"object_type", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
-	{"object_id", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
+	{"object_name", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"application_name", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"remote_host", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"remote_port", NULL, false, 0, AUDIT_RULE_TYPE_INT}

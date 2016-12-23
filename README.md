@@ -79,7 +79,7 @@ In this example `Session audit logging` is used for logging DDL and SELECT state
 [rule]
 format = 'AUDIT: SESSION,%statement_id,%sub_statement_id,%class,%i,%object_type,%objrect_id,%command_text'
 class = 'READ,WRITE'
-object_id = 'account'
+object_name = 'account'
 ```
 
 #### SQL:
@@ -312,7 +312,7 @@ format = 'CONNECTION: %d,%u,"%connection_message"'
 class = 'CONNECT'
 
 [rule]
-format = 'DML: %d,%u,%class,%command_tag,"%object_id","%command_text"'
+format = 'DML: %d,%u,%class,%command_tag,"%object_name","%command_text"'
 class = 'READ,WRITE'
 ```
 
@@ -427,17 +427,17 @@ class = 'NONE'
 # example2:
 # rule 1 : no filter. log all logs
 [rule] #1
-format = 'ALL: %t,%d,%u,%class,%cmmand_tag,"%object_id","%command_text"'
+format = 'ALL: %t,%d,%u,%class,%cmmand_tag,"%object_name","%command_text"'
 
 #rule 2; log DML in AM
 [rule] #2.
-format = 'DML-AM: %d,%u,%class,%command_tag,"%object_id","%command_text"'
+format = 'DML-AM: %d,%u,%class,%command_tag,"%object_name","%command_text"'
 class = 'READ,WRITE'
 timestamp = '00:00:00-11:59:59'
 
 #rule 3 ; log DML in PM
 [rule] #3
-format    =  'DML-PM: %d,%u,%class,%command_tag,"%object_id","%command_text"'
+format    =  'DML-PM: %d,%u,%class,%command_tag,"%object_name","%command_text"'
 class      = ' READ , WRITE '
 timestamp != '00:00:00-05:59:59, 06:00:00-11:59:59'
 
@@ -509,7 +509,7 @@ The Escapes.
 
  similar to %d of log_line_prefix.
 
-- %object_id
+- %object_name
 
  The fully-qualified object name (e.g. public.account).
 
@@ -560,7 +560,7 @@ The Escapes.
 - The default is:
 
 ```
-'AUDIT: SESSION,%statement_id,%sub_statement_id,%class,%command_tag,%object_type,%object_id,%command_text'
+'AUDIT: SESSION,%statement_id,%sub_statement_id,%class,%command_tag,%object_type,%object_name,%command_text'
 ```
 
 - Note: When you write returns ('\n') in a format, returns ('\n') will also be reflected in logs.
@@ -581,7 +581,7 @@ command_tag
 audit_role
 database
 object_type
-object_id
+object_name
 remote_host
 remote_port
 timestamp
@@ -607,7 +607,7 @@ Specifies which type of objects will be logged. Possible values are a comma-deli
 
 Specifies which use belonging  to role will be logged.  Possible values are a comma-delimited list of the values.
 
-- command_tag, database, object_id, remote_host, remote_port
+- command_tag, database, object_name, remote_host, remote_port
 
 Specifies which database elements in the statements will be logged. Possible values are a comma-delimited list. Spaces and tabs between the values and commas are ignored. In the value '%' can be used for backward match or forward match.
 

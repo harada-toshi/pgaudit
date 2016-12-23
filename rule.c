@@ -231,7 +231,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	bool matched = false;
 
 	char *database_name = NULL;
-	char *object_id = NULL;
+	char *object_name = NULL;
 	char *appname = NULL;
 	char *remote_host = NULL;
 	int	object_type = 0;
@@ -245,7 +245,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 		database_name = MyProcPort->database_name;
 
 		/* object name */
-		object_id = (stackItem->auditEvent.objectName == NULL) ?
+		object_name = (stackItem->auditEvent.objectName == NULL) ?
 			"" : stackItem->auditEvent.objectName;
 
 		/* object type */
@@ -284,9 +284,6 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	/*
 	 * Validate each rule to this audit event and set true
 	 * corresponding index of rule if rules did match.
-	 *
-	 * XXX : We only support 'database' rule so far. The apply_one_rule
-	 * for other rules always return true.
 	 */
 	foreach(cell, ruleConfigs)
 	{
@@ -297,7 +294,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 		{
 			/*
 			 * When we're about to log related to table operation such as read,
-			 * write and misc, we apply object_id and object_type rule in addition.
+			 * write and misc, we apply object_name and object_type rule in addition.
 			 */
 			if (apply_one_rule(&audit_ts_of_day, rconf->rules[AUDIT_RULE_TIMESTAMP]) &&
 				apply_one_rule(database_name, rconf->rules[AUDIT_RULE_DATABASE]) &&
@@ -305,11 +302,12 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
 				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
 				apply_one_rule(&object_type, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
-				apply_one_rule(object_id, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
+				apply_one_rule(object_name, rconf->rules[AUDIT_RULE_OBJECT_NAME]) &&
 				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
 				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
 			{
+				/* All rule matched, will emit this event */
 				matched = true;
 				ret = true;
 			}
@@ -319,7 +317,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 			/*
 			 * When we're about to log related to, for exmple, error, connection,
 			 * fucntion, backup, ddl and connect, we apply the rules except for
-			 * object_id and object_type.
+			 * object_name and object_type.
 			 *
 			 * XXX : Need to consider how we process AUDIT_RULE_COMMAND_TAG.
 			 */
@@ -332,6 +330,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
 			{
+				/* All rule matched, will emit this event */
 				matched = true;
 				ret = true;
 			}
