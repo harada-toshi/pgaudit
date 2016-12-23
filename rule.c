@@ -232,6 +232,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 
 	char *database_name = NULL;
 	char *object_id = NULL;
+	char *appname = NULL;
 	int	object_type = 0;
 	pg_time_t audit_ts_of_day;
 
@@ -244,6 +245,8 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 		object_type = (stackItem->auditEvent.objectType == NULL) ?
 			0 : objecttype_to_bitmap(stackItem->auditEvent.objectType);
 		audit_ts_of_day = auditTimestampOfDay;
+		appname = (application_name == NULL || application_name == '\0') ?
+			"" : application_name;
 	}
 	else
 	{
@@ -251,6 +254,8 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 		if (MyProcPort != NULL && MyProcPort->database_name != NULL)
 			database_name = MyProcPort->database_name;
 		audit_ts_of_day = auditTimestampOfDay;
+		appname = (application_name == NULL || application_name == '\0') ?
+			"" : application_name;
 	}
 
 	/*
@@ -278,7 +283,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
 				apply_one_rule(&object_type, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
 				apply_one_rule(object_id, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
-				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
+				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
 			{
@@ -300,7 +305,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_AUDIT_ROLE]) &&
 				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
 				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
-				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
+				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
 			{

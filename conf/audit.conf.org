@@ -24,3 +24,13 @@ timestamp = '##BEGIN##-##END##'
 object_id = 'public.timestamp_test2'
 class = 'READ'
 timestamp != '##BEGIN##-##END##'
+
+[rule] # test for application name
+object_id = 'public.appname1'
+class = 'READ'
+application_name = 'appname1'
+
+[rule] # test for application name
+object_id = 'public.appname2'
+class = 'ERROR'
+application_name = 'appname2'
