@@ -27,7 +27,7 @@
 
 space		[ \t\n\r\f\v]
 
-char		[a-zA-Z\%\,\"\'\(\)\*]
+char		[a-zA-Z\%\,\"\'\(\)\*\_]
 val_string	\'([^'\\\n]|\\.|\'\')*\'
 int		[1-9][0-9]*
 boolean		off|on|true|false|0|1
