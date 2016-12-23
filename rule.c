@@ -233,29 +233,52 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	char *database_name = NULL;
 	char *object_id = NULL;
 	char *appname = NULL;
+	char *remote_host = NULL;
 	int	object_type = 0;
 	pg_time_t audit_ts_of_day;
 
 	if (stackItem != NULL)
 	{
-		/* XXX : Prepare information for session "statement" logging */
+		/* Prepare informations used for filtering in statement logging */
+
+		/* database name */
 		database_name = MyProcPort->database_name;
+
+		/* object name */
 		object_id = (stackItem->auditEvent.objectName == NULL) ?
 			"" : stackItem->auditEvent.objectName;
+
+		/* object type */
 		object_type = (stackItem->auditEvent.objectType == NULL) ?
 			0 : objecttype_to_bitmap(stackItem->auditEvent.objectType);
+
+		/* timestamp */
 		audit_ts_of_day = auditTimestampOfDay;
+
+		/* application name */
 		appname = (application_name == NULL || application_name == '\0') ?
 			"" : application_name;
+
+		/* remote host name */
+		remote_host = MyProcPort->remote_host;
 	}
 	else
 	{
-		/* XXX : prepare information for session "edata" logging */
+		/* Prepare informations used for filtering in error logging */
+		/* database name */
 		if (MyProcPort != NULL && MyProcPort->database_name != NULL)
 			database_name = MyProcPort->database_name;
+
+		/* timestamp  */
 		audit_ts_of_day = auditTimestampOfDay;
+
+		/* application name */
 		appname = (application_name == NULL || application_name == '\0') ?
 			"" : application_name;
+
+		/* remote host name */
+		if (MyProcPort != NULL && MyProcPort->remote_host != NULL)
+			remote_host = MyProcPort->remote_host;
 	}
 
 	/*
@@ -284,7 +307,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(&object_type, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
 				apply_one_rule(object_id, rconf->rules[AUDIT_RULE_OBJECT_ID]) &&
 				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
-				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
+				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
 			{
 				matched = true;
@@ -306,7 +329,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
 				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
 				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
-				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
+				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
 				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
 			{
 				matched = true;

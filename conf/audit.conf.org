@@ -9,6 +9,7 @@ log_for_test = on
 database = 'foo'
 class = 'DDL, READ, WRITE, MISC, ROLE, FUNCTION'
 object_type = 'TABLE, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
+remote_host = '[local]'
 
 [rule] # dummy rule to check duplicate log output.
 database = 'foobaafoobaa'
