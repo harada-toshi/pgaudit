@@ -38,15 +38,13 @@ enum
 	AUDIT_RULE_OBJECT_TYPE,
 	AUDIT_RULE_OBJECT_NAME,
 	AUDIT_RULE_APPLICATION_NAME,
-	AUDIT_RULE_REMOTE_HOST,
-	AUDIT_RULE_REMOTE_PORT,
+	AUDIT_RULE_REMOTE_HOST
 };
 
 /* Configuration variable types */
 enum
 {
-	AUDIT_RULE_TYPE_INT = 1,
-	AUDIT_RULE_TYPE_STRING,
+	AUDIT_RULE_TYPE_STRING = 1,
 	AUDIT_RULE_TYPE_TIMESTAMP,
 	AUDIT_RULE_TYPE_BITMAP
 };
@@ -102,8 +100,6 @@ enum
 #define AUDIT_MSG_NEW_TLID			"selected new timeline ID:"
 
 /* Macros for rule */
-#define isIntRule(rule) \
-	((((AuditRule)(rule)).type == AUDIT_RULE_TYPE_INT))
 #define isStringRule(rule) \
 	((((AuditRule)(rule)).type == AUDIT_RULE_TYPE_STRING))
 #define isTimestampRule(rule) \

@@ -445,21 +445,7 @@ print_config(void)
 			if (rule.values == NULL)
 				continue;
 
-			if (isIntRule(rule))
-			{
-				int num = rule.nval;
-				int i;
-
-				for (i = 0; i < num; i++)
-				{
-					int val = ((int *)rule.values)[i];
-					AUDIT_EREPORT(LOG, (errmsg("    INT %s %s %d",
-							rule.field,
-							rule.eq ? "=" : "!=",
-											   val)));
-				}
-			}
-			else if (isStringRule(rule))
+			if (isStringRule(rule))
 			{
 				int num = rule.nval;
 				int i;

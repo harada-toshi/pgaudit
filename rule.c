@@ -15,7 +15,6 @@
 
 static bool apply_one_rule(void *value, AuditRule rule);
 static bool apply_string_rule(char *value, AuditRule rule);
-static bool apply_integer_rule(int value, AuditRule rule);
 static bool apply_timestamp_rule(pg_time_t value, AuditRule rule);
 static bool apply_bitmap_rule(int value, AuditRule rule);
 
@@ -304,8 +303,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(&object_type, rconf->rules[AUDIT_RULE_OBJECT_TYPE]) &&
 				apply_one_rule(object_name, rconf->rules[AUDIT_RULE_OBJECT_NAME]) &&
 				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
-				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
-				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
+				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]))
 			{
 				/* All rule matched, will emit this event */
 				matched = true;
@@ -327,8 +325,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 				apply_one_rule(&class, rconf->rules[AUDIT_RULE_CLASS]) &&
 				//apply_one_rule(NULL, rconf->rules[AUDIT_RULE_COMMAND_TAG]) &&
 				apply_one_rule(appname, rconf->rules[AUDIT_RULE_APPLICATION_NAME]) &&
-				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]) &&
-				apply_one_rule(NULL, rconf->rules[AUDIT_RULE_REMOTE_PORT]))
+				apply_one_rule(remote_host, rconf->rules[AUDIT_RULE_REMOTE_HOST]))
 			{
 				/* All rule matched, will emit this event */
 				matched = true;
@@ -356,12 +353,7 @@ apply_one_rule(void *value, AuditRule rule)
 	if (value == NULL)
 		return true;
 
-	if (isIntRule(rule))
-	{
-		int *val = (int *)value;
-		return apply_integer_rule(*val, rule);
-	}
-	else if (isStringRule(rule))
+	if (isStringRule(rule))
 	{
 		char *val = (char *)value;
 		return apply_string_rule(val, rule);
@@ -404,13 +396,6 @@ apply_string_rule(char *value, AuditRule rule)
 	}
 
 	return false;
-}
-
-static bool
-apply_integer_rule(int value, AuditRule rule)
-{
-	/* XXX : we should complete this function */
-	return true;
 }
 
 /*

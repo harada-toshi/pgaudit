@@ -41,14 +41,13 @@ struct AuditRule rules_template[] =
 {
 	{"timestamp", NULL, false, 0, AUDIT_RULE_TYPE_TIMESTAMP},
 	{"database", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
-	{"audit_role", NULL, false, 0, AUDIT_RULE_TYPE_INT},
+	{"audit_role", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"class", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
 	{"command_tag", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"object_type", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
 	{"object_name", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"application_name", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
-	{"remote_host", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
-	{"remote_port", NULL, false, 0, AUDIT_RULE_TYPE_INT}
+	{"remote_host", NULL, false, 0, AUDIT_RULE_TYPE_STRING}
 };
 
 /*
@@ -375,26 +374,7 @@ validate_settings(char *field, char *op,char *value,
 
 					list_len = list_length(value_list);
 
-					/* Process value_list using appropriate method */
-					if (rule->type == AUDIT_RULE_TYPE_INT)
-					{
-						int *int_values = palloc(sizeof(int) * list_len);
-
-						/*
-						 * We expect that the format of integer type value
-						 * is '123, 234, ...'.
-						 */
-						foreach(cell, value_list)
-						{
-							int val = atoi((char *) lfirst(cell));
-							int_values[rule->nval] = val;
-							rule->nval++;
-						}
-
-						rule->values = int_values;
-						rule->eq = op_to_bool(op);
-					}
-					else if (rule->type == AUDIT_RULE_TYPE_STRING)
+					if (rule->type == AUDIT_RULE_TYPE_STRING)
 					{
 						char **str_values = palloc(sizeof(char *) * list_len);
 						int i;
