@@ -264,6 +264,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 	else
 	{
 		/* Prepare informations used for filtering in error logging */
+
 		/* database name */
 		if (MyProcPort != NULL && MyProcPort->database_name != NULL)
 			database_name = MyProcPort->database_name;
