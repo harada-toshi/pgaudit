@@ -43,6 +43,7 @@ struct AuditRule rules_template[] =
 	{"database", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"audit_role", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"class", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
+	{"command_tag", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"object_type", NULL, false, 0, AUDIT_RULE_TYPE_BITMAP},
 	{"object_name", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
 	{"application_name", NULL, false, 0, AUDIT_RULE_TYPE_STRING},
