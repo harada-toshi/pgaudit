@@ -7,9 +7,14 @@ log_for_test = on
 
 [rule] # test for database and class
 database = 'foo'
-class = 'DDL, READ, WRITE, MISC, ROLE, FUNCTION'
+class = 'DDL, READ, WRITE, ROLE, FUNCTION'
 object_type = 'TABLE, INDEX, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
 remote_host = '[local]'
+
+[rule] # test for class
+database = 'baz'
+class != 'READ, MISC, ROLE, FUNCTION' # DDL and WRITE should be logged
+object_name = 'public.a2'
 
 [rule] # dummy rule to check duplicate log output.
 database = 'foobaafoobaa'

@@ -15,11 +15,16 @@ SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
 SELECT current_database() \gset
 CREATE DATABASE foo;
 CREATE DATABASE bar;
+CREATE DATABASE baz;
 \c foo
 CREATE EXTENSION pgaudit;
 SELECT extname, extversion FROM pg_extension;
 SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
 \c bar
+CREATE EXTENSION pgaudit;
+SELECT extname, extversion FROM pg_extension;
+SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
+\c baz
 CREATE EXTENSION pgaudit;
 SELECT extname, extversion FROM pg_extension;
 SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';

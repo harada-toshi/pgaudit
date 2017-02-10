@@ -26,6 +26,7 @@ SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
 SELECT current_database() \gset
 CREATE DATABASE foo;
 CREATE DATABASE bar;
+CREATE DATABASE baz;
 \c foo
 CREATE EXTENSION pgaudit;
 SELECT extname, extversion FROM pg_extension;
@@ -43,6 +44,22 @@ SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
 (2 rows)
 
 \c bar
+CREATE EXTENSION pgaudit;
+SELECT extname, extversion FROM pg_extension;
+ extname | extversion 
+---------+------------
+ plpgsql | 1.0
+ pgaudit | 1.0
+(2 rows)
+
+SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
+         evtname         |    evtevent     
+-------------------------+-----------------
+ pgaudit_ddl_command_end | ddl_command_end
+ pgaudit_sql_drop        | sql_drop
+(2 rows)
+
+\c baz
 CREATE EXTENSION pgaudit;
 SELECT extname, extversion FROM pg_extension;
  extname | extversion 
