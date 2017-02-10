@@ -13,6 +13,8 @@
 
 #include "config.h"
 
+#define AUDIT_TABLE_OPERATION() (LOG_READ | LOG_WRITE)
+
 static bool apply_one_rule(void *value, AuditRule rule);
 static bool apply_string_rule(char *value, AuditRule rule);
 static bool apply_timestamp_rule(pg_time_t value, AuditRule rule);
@@ -298,7 +300,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 		AuditRuleConfig *rconf = (AuditRuleConfig *)lfirst(cell);
 		bool ret = false;
 
-		if (class & LOG_READ || class & LOG_WRITE || class & LOG_MISC)
+		if (class & AUDIT_TABLE_OPERATION())
 		{
 			/*
 			 * When we're about to log related to table operation such as read,
@@ -402,6 +404,7 @@ apply_string_rule(char *value, AuditRule rule)
 	{
 		if (pg_strcasecmp(value, string_list[i]) == 0)
 		{
+			/* Matched */
 			if (rule.eq)
 				return true;
 			else
@@ -439,6 +442,7 @@ apply_timestamp_rule(pg_time_t value, AuditRule rule)
 		 */
 		if (begin <= value && value <= end)
 		{
+			/* Matched */
 			if (rule.eq)
 				return true;
 			else
@@ -467,12 +471,7 @@ apply_bitmap_rule(int value, AuditRule rule)
 		return true;
 
 	if (value & *bitmap)
-	{
-		if (rule.eq)
-			ret = true;
-		else
-			ret = false;
-	}
+		ret = true;
 
-	return ret;
+	return !(ret ^ rule.eq);
 }
