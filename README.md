@@ -287,6 +287,8 @@ CREATE EVENT TRIGGER pgaudit_sql_drop
     ON sql_drop EXECUTE PROCEDURE pgaudit_sql_drop();
 ```
 
+The above procedures are done by CREATE EXTENSION but note that `CREATE EXTENSION pgaudit` must be called before any rule is specified.
+
 #### ROLE
 
 See [Object-Audit-Logging](#object_audit_logging).

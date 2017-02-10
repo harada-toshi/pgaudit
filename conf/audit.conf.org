@@ -8,7 +8,7 @@ log_for_test = on
 [rule] # test for database and class
 database = 'foo'
 class = 'DDL, READ, WRITE, MISC, ROLE, FUNCTION'
-object_type = 'TABLE, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
+object_type = 'TABLE, INDEX, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
 remote_host = '[local]'
 
 [rule] # dummy rule to check duplicate log output.

@@ -1,8 +1,7 @@
--- Set up relations for regression test
+-- Set up relations for regression test.
+-- Required databases are created by init.sql script.
 CREATE USER foo_user;
 CREATE USER bar_user;
-CREATE DATABASE foo;
-CREATE DATABASE bar;
 
 \c foo
 CREATE FUNCTION test_func() RETURNS INT AS

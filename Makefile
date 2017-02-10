@@ -30,7 +30,7 @@ endif
 
 # Regression test for all of rules.
 # XXX : we must add existing 'pgaudit' regression test.
-REGRESSCHECKS=timestamp database object_type class application_name
+REGRESSCHECKS=init timestamp database object_type class application_name
 
 pre_installcheck:
 	/bin/sh conf/prepare_config_file.sh

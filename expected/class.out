@@ -1,9 +1,10 @@
 \c foo
 -- DDL, logged.
 CREATE TABLE a1 (col int primary key);
-NOTICE:  AUDIT: SESSION,1,1,DDL,,foo,[local],pg_regress,,,,,CREATE TABLE,,,CREATE TABLE a1 (col int primary key);,<not logged>
+NOTICE:  AUDIT: SESSION,1,1,DDL,,foo,[local],pg_regress,,,,,CREATE TABLE,TABLE,public.a1,CREATE TABLE a1 (col int primary key);,<not logged>
+NOTICE:  AUDIT: SESSION,1,1,DDL,,foo,[local],pg_regress,,,,,CREATE INDEX,INDEX,public.a1_pkey,CREATE TABLE a1 (col int primary key);,<not logged>
 ALTER TABLE a1 SET (fillfactor = 100);
-NOTICE:  AUDIT: SESSION,2,1,DDL,,foo,[local],pg_regress,,,,,ALTER TABLE,,,ALTER TABLE a1 SET (fillfactor = 100);,<not logged>
+NOTICE:  AUDIT: SESSION,2,1,DDL,,foo,[local],pg_regress,,,,,ALTER TABLE,TABLE,public.a1,ALTER TABLE a1 SET (fillfactor = 100);,<not logged>
 -- READ, logged.
 SELECT * FROM a1;
 NOTICE:  AUDIT: SESSION,3,1,READ,,foo,[local],pg_regress,,,,,SELECT,TABLE,public.a1,SELECT * FROM a1;,<not logged>
@@ -23,8 +24,13 @@ REINDEX TABLE a1;
 CREATE USER test_user;
 NOTICE:  AUDIT: SESSION,6,1,ROLE,,foo,[local],pg_regress,,,,,CREATE ROLE,,,CREATE USER test_user;,<not logged>
 GRANT ALL ON a1 To test_user;
-NOTICE:  AUDIT: SESSION,7,1,ROLE,,foo,[local],pg_regress,,,,,GRANT,,,GRANT ALL ON a1 To test_user;,<not logged>
+NOTICE:  AUDIT: SESSION,7,1,ROLE,,foo,[local],pg_regress,,,,,GRANT,TABLE,,GRANT ALL ON a1 To test_user;,<not logged>
 -- FUNCTION, logged.
 DO $$ BEGIN EXECUTE 'select ' || '* FROM a1'; END$$;
 NOTICE:  AUDIT: SESSION,8,1,FUNCTION,,foo,[local],pg_regress,,,,,DO,,,DO $$ BEGIN EXECUTE 'select ' || '* FROM a1'; END$$;,<not logged>
 NOTICE:  AUDIT: SESSION,8,2,READ,,foo,[local],pg_regress,,,,,SELECT,TABLE,public.a1,select * FROM a1,<not logged>
+-- DROP table
+DROP TABLE a1;
+NOTICE:  AUDIT: SESSION,9,1,DDL,,foo,[local],pg_regress,,,,,DROP TABLE,TABLE,public.a1,DROP TABLE a1;,<not logged>
+NOTICE:  AUDIT: SESSION,9,1,DDL,,foo,[local],pg_regress,,,,,DROP TABLE,TABLE CONSTRAINT,a1_pkey on public.a1,DROP TABLE a1;,<not logged>
+NOTICE:  AUDIT: SESSION,9,1,DDL,,foo,[local],pg_regress,,,,,DROP TABLE,INDEX,public.a1_pkey,DROP TABLE a1;,<not logged>
