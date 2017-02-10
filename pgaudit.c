@@ -288,6 +288,14 @@ create_audit_log_string(StringInfo buf, ErrorData *edata,
 		appendStringInfoString(buf, MyProcPort->database_name);
 	appendStringInfoChar(buf, separator);
 
+	/* user name(%u) */
+	if (!logForTest)
+	{
+		if (MyProcPort && MyProcPort->user_name)
+			appendStringInfoString(buf, MyProcPort->user_name);
+		appendStringInfoChar(buf, separator);
+	}
+
 	/* remote host(%h) */
 	if (MyProcPort && MyProcPort->remote_host)
 		appendStringInfoString(buf, MyProcPort->remote_host);
