@@ -15,7 +15,7 @@ SELECT * FROM timestamp_test2;
 (0 rows)
 
 -- Wait until past the timestamp range.
-SELECT pg_sleep(60);
+SELECT pg_sleep(extract(second from (date_trunc('min', now() + '1 min')  - now()))::int + 3);
  pg_sleep 
 ----------
  

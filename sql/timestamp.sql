@@ -8,7 +8,7 @@ SELECT * FROM timestamp_test1;
 SELECT * FROM timestamp_test2;
 
 -- Wait until past the timestamp range.
-SELECT pg_sleep(60);
+SELECT pg_sleep(extract(second from (date_trunc('min', now() + '1 min')  - now()))::int + 3);
 
 -- Check if the audit logging for timestamp_test1 is NOT logged and
 -- the audit logging for timestamp_test2 is logged now.
