@@ -143,9 +143,12 @@ class_to_bitmap(const char *str)
 
 /*
  * Return bitmap bit for LOG_OBJECT_XXX corresponding OBJECT_TYPE_XXXX.
+ * If config is ture, we're interested in configurable setting value rather
+ * than object type given by event trigger. If config is false, all type
+ * of object types are acceptable.
  */
 int
-objecttype_to_bitmap(const char *str)
+objecttype_to_bitmap(const char *str, bool config)
 {
 	int object_type;
 
@@ -180,9 +183,15 @@ objecttype_to_bitmap(const char *str)
 			 pg_strcasecmp(str, OBJECT_TYPE_CONFIG_UNKNOWN) == 0)
 		object_type = LOG_OBJECT_UNKNOWN;
 	else
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("invalid value \"%s\" for object_type", str)));
+	{
+		if (config)
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("invalid value \"%s\" for object_type", str)));
+		else
+			/* object type by event trigger must be logged */
+			object_type = LOG_OBJECT_ALL;
+	}
 
 	return object_type;
 }
@@ -419,7 +428,7 @@ validate_settings(char *field, char *op,char *value,
 							if (strcasecmp(field, "class") == 0)
 								*bitmap |= class_to_bitmap(val);
 							else if (strcasecmp(field, "object_type") == 0)
-								*bitmap |= objecttype_to_bitmap(val);
+								*bitmap |= objecttype_to_bitmap(val, true);
 						}
 
 						/*

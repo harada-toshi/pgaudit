@@ -53,16 +53,17 @@
 #define OBJECT_TYPE_CONFIG_UNKNOWN			"UNKNOWN"
 
 /* Bits the object type for filtering object by object_type field */
-#define LOG_OBJECT_TABLE			(1 << 0)
-#define LOG_OBJECT_INDEX			(1 << 1)
-#define LOG_OBJECT_SEQUENCE			(1 << 2)
-#define LOG_OBJECT_TOASTVALUE		(1 << 3)
-#define LOG_OBJECT_VIEW				(1 << 4)
-#define LOG_OBJECT_MATVIEW			(1 << 5)
-#define LOG_OBJECT_COMPOSITE_TYPE	(1 << 6)
-#define LOG_OBJECT_FOREIGN_TABLE	(1 << 7)
-#define LOG_OBJECT_FUNCTION			(1 << 8)
-#define LOG_OBJECT_UNKNOWN			(1 << 9)
+#define LOG_OBJECT_TABLE			0x0001
+#define LOG_OBJECT_INDEX			0x0002
+#define LOG_OBJECT_SEQUENCE			0x0004
+#define LOG_OBJECT_TOASTVALUE		0x0008
+#define LOG_OBJECT_VIEW				0x0010
+#define LOG_OBJECT_MATVIEW			0x0020
+#define LOG_OBJECT_COMPOSITE_TYPE	0x0040
+#define LOG_OBJECT_FOREIGN_TABLE	0x0080
+#define LOG_OBJECT_FUNCTION			0x0100
+#define LOG_OBJECT_UNKNOWN			0x0200
+#define LOG_OBJECT_ALL				0x0FFF
 
 typedef struct AuditOutputConfig
 {
@@ -104,7 +105,7 @@ extern List	*ruleConfigs;
 
 /* extern functions */
 extern void processAuditConfigFile(char* filename);
-extern int objecttype_to_bitmap(const char *str);
+extern int objecttype_to_bitmap(const char *str, bool config);
 
 extern void pgaudit_set_option(char* name, char* value);
 extern void pgaudit_set_output_literal(char* name, char* value);

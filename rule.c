@@ -249,7 +249,7 @@ apply_all_rules(AuditEventStackItem *stackItem, ErrorData *edata,
 
 		/* object type */
 		object_type = (stackItem->auditEvent.objectType == NULL) ?
-			0 : objecttype_to_bitmap(stackItem->auditEvent.objectType);
+			0 : objecttype_to_bitmap(stackItem->auditEvent.objectType, false);
 
 		/* timestamp */
 		audit_ts_of_day = auditTimestampOfDay;
