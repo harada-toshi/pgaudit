@@ -34,3 +34,50 @@ DROP TABLE a1;
 NOTICE:  AUDIT: SESSION,9,1,DDL,,foo,[local],pg_regress,,,,,DROP TABLE,TABLE,public.a1,DROP TABLE a1;,<not logged>
 NOTICE:  AUDIT: SESSION,9,1,DDL,,foo,[local],pg_regress,,,,,DROP TABLE,TABLE CONSTRAINT,a1_pkey on public.a1,DROP TABLE a1;,<not logged>
 NOTICE:  AUDIT: SESSION,9,1,DDL,,foo,[local],pg_regress,,,,,DROP TABLE,INDEX,public.a1_pkey,DROP TABLE a1;,<not logged>
+\c baz
+-- DDL, logged
+CREATE TABLE a2 (c int primary key);
+NOTICE:  AUDIT: SESSION,1,1,DDL,,baz,[local],pg_regress,,,,,CREATE TABLE,TABLE,public.a2,CREATE TABLE a2 (c int primary key);,<not logged>
+NOTICE:  AUDIT: SESSION,1,1,DDL,,baz,[local],pg_regress,,,,,CREATE INDEX,INDEX,public.a2_pkey,CREATE TABLE a2 (c int primary key);,<not logged>
+-- READ, not logged
+SELECT  * FROM a2;
+ c 
+---
+(0 rows)
+
+-- DDL and READ
+CREATE VIEW a2_view AS SELECT * FROM a2;
+NOTICE:  AUDIT: SESSION,2,1,DDL,,baz,[local],pg_regress,,,,,CREATE VIEW,VIEW,public.a2_view,CREATE VIEW a2_view AS SELECT * FROM a2;,<not logged>
+-- WRITE, logged
+INSERT INTO a2 VALUES(1);
+NOTICE:  AUDIT: SESSION,3,1,WRITE,,baz,[local],pg_regress,,,,,INSERT,TABLE,public.a2,INSERT INTO a2 VALUES(1);,<not logged>
+UPDATE a2 SET c = c;
+NOTICE:  AUDIT: SESSION,4,1,WRITE,,baz,[local],pg_regress,,,,,UPDATE,TABLE,public.a2,UPDATE a2 SET c = c;,<not logged>
+-- DDL, logged
+ALTER TABLE a2 SET (fillfactor = 100);
+NOTICE:  AUDIT: SESSION,5,1,DDL,,baz,[local],pg_regress,,,,,ALTER TABLE,TABLE,public.a2,ALTER TABLE a2 SET (fillfactor = 100);,<not logged>
+-- DDL, logged
+CREATE FUNCTION test_func() RETURNS INT AS
+$$
+BEGIN
+    RETURN 0;
+END;
+$$ LANGUAGE plpgsql;
+NOTICE:  AUDIT: SESSION,6,1,DDL,,baz,[local],pg_regress,,,,,CREATE FUNCTION,FUNCTION,public.test_func(),"CREATE FUNCTION test_func() RETURNS INT AS
+$$
+BEGIN
+    RETURN 0;
+END;
+$$ LANGUAGE plpgsql;",<not logged>
+-- FUNCTION, not logged
+SELECT test_func();
+ test_func 
+-----------
+         0
+(1 row)
+
+-- ROLE, not logged
+ALTER USER foo_user SUPERUSER;
+ALTER USER foo_user NOSUPERUSER;
+-- MISC, not logged
+VACUUM a2;
