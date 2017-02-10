@@ -393,10 +393,15 @@ apply_string_rule(char *value, AuditRule rule)
 	for (i = 0; i < rule.nval; i++)
 	{
 		if (pg_strcasecmp(value, string_list[i]) == 0)
-			return true;
+		{
+			if (rule.eq)
+				return true;
+			else
+				return false;
+		}
 	}
 
-	return false;
+		return (rule.eq) ? false : true;
 }
 
 /*
@@ -454,7 +459,12 @@ apply_bitmap_rule(int value, AuditRule rule)
 		return true;
 
 	if (value & *bitmap)
-		ret = true;
+	{
+		if (rule.eq)
+			ret = true;
+		else
+			ret = false;
+	}
 
 	return ret;
 }
