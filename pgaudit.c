@@ -1529,6 +1529,10 @@ pgaudit_ddl_command_end(PG_FUNCTION_ARGS)
     MemoryContext contextQuery;
     MemoryContext contextOld;
 
+	/* Continue only if session DDL logging is enabled */
+	if (!ruleConfigs)
+		PG_RETURN_NULL();
+
     /* Be sure the module was loaded */
     if (!auditEventStack)
         elog(ERROR, "pgaudit not loaded before call to "
