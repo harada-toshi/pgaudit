@@ -14,7 +14,7 @@ remote_host = '[local]'
 [rule] # RULE 2, test for class
 database = 'baz'
 class != 'READ, MISC, ROLE, FUNCTION' # DDL and WRITE should be logged
-object_name = 'public.a2'
+object_name = 'public.a2, public.trig_test, public.trig_audit'
 
 [rule] # RULE 3, dummy rule to check duplicate log output.
 database = 'foobaafoobaa'

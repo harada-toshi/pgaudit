@@ -81,3 +81,83 @@ ALTER USER foo_user SUPERUSER;
 ALTER USER foo_user NOSUPERUSER;
 -- MISC, not logged
 VACUUM a2;
+--
+-- Test for trigger. Corresponding RULE 2.
+--
+-- Set up DDLs are logged.
+CREATE TABLE trig_test(v text);
+NOTICE:  AUDIT: SESSION,7,1,DDL,,baz,[local],pg_regress,,,,,CREATE TABLE,TABLE,public.trig_test,CREATE TABLE trig_test(v text);,<not logged>
+CREATE TABLE trig_audit(
+operation char(1) NOT NULL,
+stamp timestamp NOT NULL,
+userid text NOT NULL,
+old_value text,
+new_value text
+);
+NOTICE:  AUDIT: SESSION,8,1,DDL,,baz,[local],pg_regress,,,,,CREATE TABLE,TABLE,public.trig_audit,"CREATE TABLE trig_audit(
+operation char(1) NOT NULL,
+stamp timestamp NOT NULL,
+userid text NOT NULL,
+old_value text,
+new_value text
+);",<not logged>
+CREATE OR REPLACE FUNCTION process_trig_audit() RETURNS TRIGGER AS $emp_audit$
+BEGIN
+    IF (TG_OP = 'DELETE') THEN
+        INSERT INTO trig_audit SELECT 'D', now(), user, OLD.*, NULL;
+        RETURN OLD;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO trig_audit SELECT 'U', now(), user, OLD.*, NEW.*;
+        RETURN NEW;
+   ELSIF (TG_OP = 'INSERT') THEN
+        INSERT INTO trig_audit SELECT 'I', now(), user, NULL, NEW.*;
+        RETURN NEW;
+   END IF;
+        RETURN NULL;
+END;
+$emp_audit$ LANGUAGE plpgsql;
+NOTICE:  AUDIT: SESSION,9,1,DDL,,baz,[local],pg_regress,,,,,CREATE FUNCTION,FUNCTION,public.process_trig_audit(),"CREATE OR REPLACE FUNCTION process_trig_audit() RETURNS TRIGGER AS $emp_audit$
+BEGIN
+    IF (TG_OP = 'DELETE') THEN
+        INSERT INTO trig_audit SELECT 'D', now(), user, OLD.*, NULL;
+        RETURN OLD;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO trig_audit SELECT 'U', now(), user, OLD.*, NEW.*;
+        RETURN NEW;
+   ELSIF (TG_OP = 'INSERT') THEN
+        INSERT INTO trig_audit SELECT 'I', now(), user, NULL, NEW.*;
+        RETURN NEW;
+   END IF;
+        RETURN NULL;
+END;
+$emp_audit$ LANGUAGE plpgsql;",<not logged>
+CREATE TRIGGER trig_audit AFTER INSERT OR UPDATE OR DELETE ON trig_test
+FOR EACH ROW EXECUTE PROCEDURE process_trig_audit();
+NOTICE:  AUDIT: SESSION,10,1,DDL,,baz,[local],pg_regress,,,,,CREATE TRIGGER,TRIGGER,trig_audit on public.trig_test,"CREATE TRIGGER trig_audit AFTER INSERT OR UPDATE OR DELETE ON trig_test
+FOR EACH ROW EXECUTE PROCEDURE process_trig_audit();",<not logged>
+-- Check if the following trigger operations are logged as well.
+-- INSERT, logged
+INSERT INTO trig_test VALUES ('new value');
+NOTICE:  AUDIT: SESSION,11,1,WRITE,,baz,[local],pg_regress,,,,,INSERT,TABLE,public.trig_test,INSERT INTO trig_test VALUES ('new value');,<not logged>
+NOTICE:  AUDIT: SESSION,11,2,WRITE,,baz,[local],pg_regress,,,,,INSERT,TABLE,public.trig_audit,"INSERT INTO trig_audit SELECT 'I', now(), user, NULL, NEW.*",<not logged>
+-- UPDATE, logged
+UPDATE trig_test SET v = 'updated value';
+NOTICE:  AUDIT: SESSION,12,1,WRITE,,baz,[local],pg_regress,,,,,UPDATE,TABLE,public.trig_test,UPDATE trig_test SET v = 'updated value';,<not logged>
+NOTICE:  AUDIT: SESSION,12,2,WRITE,,baz,[local],pg_regress,,,,,INSERT,TABLE,public.trig_audit,"INSERT INTO trig_audit SELECT 'U', now(), user, OLD.*, NEW.*",<not logged>
+-- DELETE, logged
+DELETE FROM trig_test; -- delete 1 row
+NOTICE:  AUDIT: SESSION,13,1,WRITE,,baz,[local],pg_regress,,,,,DELETE,TABLE,public.trig_test,DELETE FROM trig_test;,<not logged>
+NOTICE:  AUDIT: SESSION,13,2,WRITE,,baz,[local],pg_regress,,,,,INSERT,TABLE,public.trig_audit,"INSERT INTO trig_audit SELECT 'D', now(), user, OLD.*, NULL",<not logged>
+-- SELECT, not logged
+SELECT count(*) FROM trig_test;
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM trig_audit;
+ count 
+-------
+     3
+(1 row)
+

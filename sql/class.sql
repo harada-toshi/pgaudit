@@ -44,3 +44,48 @@ ALTER USER foo_user SUPERUSER;
 ALTER USER foo_user NOSUPERUSER;
 -- MISC, not logged
 VACUUM a2;
+
+--
+-- Test for trigger. Corresponding RULE 2.
+--
+
+-- Set up DDLs are logged.
+CREATE TABLE trig_test(v text);
+CREATE TABLE trig_audit(
+operation char(1) NOT NULL,
+stamp timestamp NOT NULL,
+userid text NOT NULL,
+old_value text,
+new_value text
+);
+CREATE OR REPLACE FUNCTION process_trig_audit() RETURNS TRIGGER AS $emp_audit$
+BEGIN
+    IF (TG_OP = 'DELETE') THEN
+        INSERT INTO trig_audit SELECT 'D', now(), user, OLD.*, NULL;
+        RETURN OLD;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO trig_audit SELECT 'U', now(), user, OLD.*, NEW.*;
+        RETURN NEW;
+   ELSIF (TG_OP = 'INSERT') THEN
+        INSERT INTO trig_audit SELECT 'I', now(), user, NULL, NEW.*;
+        RETURN NEW;
+   END IF;
+        RETURN NULL;
+END;
+$emp_audit$ LANGUAGE plpgsql;
+CREATE TRIGGER trig_audit AFTER INSERT OR UPDATE OR DELETE ON trig_test
+FOR EACH ROW EXECUTE PROCEDURE process_trig_audit();
+
+-- Check if the following trigger operations are logged as well.
+-- INSERT, logged
+INSERT INTO trig_test VALUES ('new value');
+
+-- UPDATE, logged
+UPDATE trig_test SET v = 'updated value';
+
+-- DELETE, logged
+DELETE FROM trig_test; -- delete 1 row
+
+-- SELECT, not logged
+SELECT count(*) FROM trig_test;
+SELECT count(*) FROM trig_audit;
