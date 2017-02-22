@@ -75,7 +75,7 @@ void processAuditConfigFile(char* filename)
 	{
 		ereport(ERROR,
 			       (errcode_for_file_access(),
-				 errmsg("could not open file \"%s\")", filename)));
+				 errmsg("could not open file \"%s\"", filename)));
 	}
 
 	lex_buffer = pgaudit_yy_create_buffer(fp, YY_BUF_SIZE);
