@@ -295,9 +295,9 @@ See [Object-Audit-Logging](#object_audit_logging).
 
 ## Setting Parameters via the file assigned by pgaudit.config_file
 
-The settings are divided into sections where you can set some parameters to control `pgaudit`. They are "output", "option" and "rule" sections, and should be arranged this order in the file. All Section names are case-insensitive. Every section includes one or more parameters. All parameter names are case-insensitive. Every parameter takes a value of one of three types: Boolean, integer, string. Boolean values can be written as on, off, true, and false (all case-insensitive). String values can be written as comma-delimited strings between a couple of single quotes.
+The settings are divided into sections where you can set some parameters to control `pgaudit`. They are "output", "option" and "rule" sections. "output" and "option" section cannot be defined more than once in configuration file while "rule" section can be define multiple times. All section names are case-insensitive. Every section includes one or more parameters. All parameter names are case-insensitive. Every parameter takes a value of one of three types: Boolean, String. Boolean values can be written as on, off, true, and false (all case-insensitive). String values can be written as comma-delimited strings between a couple of single quotes.
 
-Each parameter takes a value of one of three types: Boolean, integer, string. Boolean values can be written as on, off, true, and false (all case-insensitive). String values can be written as comma-delimited strings between a couple of single quotes. We will example of settings with descriptions of sections, below;
+We will example of settings with descriptions of sections, below;
 
 ```
 # Where to log (e.g. log to serverlog).
