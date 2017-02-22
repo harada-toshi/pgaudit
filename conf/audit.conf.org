@@ -5,43 +5,43 @@ logger= 'serverlog'
 log_level = 'NOTICE'
 log_for_test = on
 
-[rule] # test for database and class
+[rule] # RULE 1, test for database and class
 database = 'foo'
 class = 'DDL, READ, WRITE, ROLE, FUNCTION'
 object_type = 'TABLE, INDEX, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
 remote_host = '[local]'
 
-[rule] # test for class
+[rule] # RULE 2, test for class
 database = 'baz'
 class != 'READ, MISC, ROLE, FUNCTION' # DDL and WRITE should be logged
 object_name = 'public.a2'
 
-[rule] # dummy rule to check duplicate log output.
+[rule] # RULE 3, dummy rule to check duplicate log output.
 database = 'foobaafoobaa'
 class = 'DDL, READ, WRITE, MISC, ROLE, FUNCTION'
 object_type = 'TABLE, MATERIALIZED_VIEW, SEQUENCE, FUNCTION'
 
-[rule] # test for timestamp equality
+[rule] # RULE 4, test for timestamp equality
 object_name = 'public.timestamp_test1'
 class = 'READ'
 timestamp = '##BEGIN##-##END##'
 
-[rule] # test for timestamp not equality
+[rule] # RULE 5, test for timestamp not equality
 object_name = 'public.timestamp_test2'
 class = 'READ'
 timestamp != '##BEGIN##-##END##'
 
-[rule] # test for application name
+[rule] # RULE 6, test for application name
 object_name = 'public.appname1'
 class = 'READ'
 application_name = 'appname1'
 
-[rule] # test for application name
+[rule] # RULE 7, test for application name
 object_name = 'public.appname2'
 class = 'ERROR'
 application_name = 'appname2'
 
-[rule] # test for audit role
+[rule] # RULE 8, test for audit role
 database = 'bar'
 audit_role = 'audit_role'
 class = 'DDL, READ'
