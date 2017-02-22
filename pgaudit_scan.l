@@ -67,6 +67,8 @@ void processAuditConfigFile(char* filename)
 {
 	FILE *fp;
 	AuditRuleConfig *rconf;
+	bool output_section_given = false;
+	bool option_section_given = false;
 
 	volatile YY_BUFFER_STATE lex_buffer = NULL;
         int  token;
@@ -100,16 +102,42 @@ void processAuditConfigFile(char* filename)
 			/* Set current state */
 			audit_parse_state = token;
 
-			if (audit_parse_state == AUDIT_SECTION_RULE)
+			switch(audit_parse_state)
 			{
-				/* Allocate new ruleconfig and set template variables */
-				rconf = (AuditRuleConfig *) palloc(sizeof(AuditRuleConfig));
-				memcpy(rconf->rules, rules_template, sizeof(AuditRule) * AUDIT_NUM_RULES);
+				case AUDIT_SECTION_OUTPUT:
+				{
+					if (output_section_given)
+						ereport(ERROR,
+							(errcode(ERRCODE_CONFIG_FILE_ERROR),
+							errmsg("redundant output section defined in file \"%s\"",
+								filename)));
 
-				if (ruleConfigs == NULL)
-					ruleConfigs = list_make1(rconf);
-				else
-					ruleConfigs = lappend(ruleConfigs, rconf);
+					output_section_given = true;
+					break;
+				}
+				case AUDIT_SECTION_OPTION:
+				{
+					if (option_section_given)
+						ereport(ERROR,
+							(errcode(ERRCODE_CONFIG_FILE_ERROR),
+							errmsg("redundant option section defined in file \"%s\"",
+								filename)));
+
+					option_section_given = true;
+					break;
+				}
+				case AUDIT_SECTION_RULE:
+				{
+					/* Allocate new ruleconfig and set template variables */
+					rconf = (AuditRuleConfig *) palloc(sizeof(AuditRuleConfig));
+					memcpy(rconf->rules, rules_template, sizeof(AuditRule) * AUDIT_NUM_RULES);
+
+					if (ruleConfigs == NULL)
+						ruleConfigs = list_make1(rconf);
+					else
+						ruleConfigs = lappend(ruleConfigs, rconf);
+					break;
+				}
 			}
 			continue;
 		}
