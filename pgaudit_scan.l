@@ -114,6 +114,7 @@ void processAuditConfigFile(char* filename)
 			continue;
 		}
 
+		/* Detected field string */
 		if (token == AUDIT_FIELD_OUTPUT ||
 		    token == AUDIT_FIELD_OPTION ||
 		    token == AUDIT_FIELD_RULE)
@@ -122,22 +123,11 @@ void processAuditConfigFile(char* filename)
 			if (!((audit_parse_state == AUDIT_SECTION_RULE && token == AUDIT_FIELD_RULE) ||
 			    (audit_parse_state == AUDIT_SECTION_OPTION && token == AUDIT_FIELD_OPTION) ||
 			    (audit_parse_state == AUDIT_SECTION_OUTPUT && token == AUDIT_FIELD_OUTPUT)))
-			{
-				char *state_string;
-
-				if (audit_parse_state == AUDIT_SECTION_RULE)
-					state_string = "rule section";
-				else if (audit_parse_state == AUDIT_SECTION_OPTION)
-					state_string = "option section";
-				else
-					state_string = "output section";
-
 				ereport(ERROR,
 					(errcode(ERRCODE_CONFIG_FILE_ERROR),
 						errmsg("invalid parameter \"%s\" in \"%s\" in file \"%s\"",
-						       yytext, state_string, filename)));
-				break;
-			}
+						       yytext, get_auditsection_string(audit_parse_state),
+							filename)));
 
 			/* Get field */
 			field_name = pstrdup(yytext);
@@ -176,8 +166,8 @@ void processAuditConfigFile(char* filename)
 		else
 			ereport(ERROR,
 				(errcode(ERRCODE_CONFIG_FILE_ERROR),
-					errmsg("unrecognized configuration parameter \"%s\" in file \"%s\"",
-					       yytext, filename)));
+					errmsg("unrecognized configuration token \"%s\" in \"%s\" in file \"%s\"",
+					       yytext, get_auditsection_string(audit_parse_state), filename)));
 	}
 
 	if ((fclose(fp) != 0))

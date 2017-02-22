@@ -99,6 +99,7 @@ static bool op_to_bool(const char *str);
 static pg_time_t str_to_timestamp(const char *str);
 static int class_to_bitmap(const char *str);
 static char *audit_scanstr(const char *str);
+static char *get_auditsection_string(int section);
 
 /* Function for configuration settings */
 static void validate_settings(char *field, char *op, char *value,
@@ -302,6 +303,25 @@ assign_pgaudit_log_level(char *newVal)
         auditLogLevel = WARNING;
     else if (pg_strcasecmp(newVal, "log") == 0)
         auditLogLevel = LOG;
+}
+
+/* Return section name string data */
+static char *
+get_auditsection_string(int section)
+{
+	switch(section)
+	{
+		case AUDIT_SECTION_OUTPUT:
+			return "output section";
+			break;
+		case AUDIT_SECTION_OPTION:
+			return "option section";
+			break;
+		case AUDIT_SECTION_RULE:
+			return "rule section";
+		default:
+			return "unknown";
+	}
 }
 
 /*
