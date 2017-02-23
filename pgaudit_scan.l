@@ -66,7 +66,7 @@ field_rule      format|timestamp|database|audit_role|class|command_tag|object_ty
 void processAuditConfigFile(char* filename)
 {
 	FILE *fp;
-	AuditRuleConfig *rconf;
+	AuditRuleConfig *rconf = NULL;
 	bool output_section_given = false;
 	bool option_section_given = false;
 
