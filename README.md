@@ -636,6 +636,7 @@ Specifies which database elements in the statements will be logged. Possible val
  `Session audit logging` logs a log for a SQL (Success or Error) for simple SQL, but sometimes, especially for complex SQL, logs some of logs (for each parts and an Error).
 
 - pgaudit must be set log\_connections, log\_disconnections and log\_replication\_commands is on. If all these parameters are not on, the PostgreSQL server will not start.
+  - To ensure that these parameter cannot be changed after started, pgaudit forcibly changes the context of these three parameters to `postmaster`.
 
 ## Authors
 

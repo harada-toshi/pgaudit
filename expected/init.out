@@ -22,6 +22,16 @@ SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
  pgaudit_sql_drop        | sql_drop
 (2 rows)
 
+-- check GUC variables context.
+SELECT name, context FROM pg_settings
+       WHERE name in ('log_connections', 'log_disconnections', 'log_replication_commands');
+           name           |  context   
+--------------------------+------------
+ log_connections          | postmaster
+ log_disconnections       | postmaster
+ log_replication_commands | postmaster
+(3 rows)
+
 -- Install pgaudit in other databases
 SELECT current_database() \gset
 CREATE DATABASE foo;

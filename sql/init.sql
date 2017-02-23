@@ -10,6 +10,9 @@ CREATE EXTENSION pgaudit;
 SELECT extname, extversion FROM pg_extension;
 -- check pgaudit event triggers.
 SELECT evtname, evtevent FROM pg_event_trigger WHERE evtname LIKE 'pgaudit%';
+-- check GUC variables context.
+SELECT name, context FROM pg_settings
+       WHERE name in ('log_connections', 'log_disconnections', 'log_replication_commands');
 
 -- Install pgaudit in other databases
 SELECT current_database() \gset

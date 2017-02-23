@@ -34,6 +34,7 @@
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
+#include "utils/guc_tables.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
@@ -121,6 +122,10 @@ static void pgaudit_emit_log_hook(ErrorData *edata);
 static void append_valid_csv(StringInfoData *buffer, const char *appendStr);
 static void emit_session_sql_log(AuditEventStackItem *stackItem, bool *valid_rules,
 								   const char *className);
+
+/* Function prototype for changing GUC variables */
+static int guc_var_compare(const void *a, const void *b);
+static int guc_name_compare(const char *namea, const char *nameb);
 
 /*
  * Hook functions
@@ -1753,6 +1758,11 @@ _PG_init(void)
     /* Be sure we do initialization only once */
     static bool inited = false;
 	MemoryContext old_ctx;
+	struct config_generic **guc_variables;
+	struct config_generic **record;
+	char *configKeys[4] = {"log_connections", "log_disconnections",
+						   "log_replication_commands", NULL};
+	char **key;
 
     if (inited)
         return;
@@ -1768,7 +1778,9 @@ _PG_init(void)
 	 */
     if ( !Log_connections || !Log_disconnections || !log_replication_commands )
         ereport(ERROR, (errcode(ERRCODE_CONFIG_FILE_ERROR),
-                errmsg("pgaudit must be set log_connections, log_disconnections and log_replication_commands.")));
+						errmsg("pgaudit must be set log_connections, log_disconnections and log_replication_commands."),
+						errhint("log_connections = %d, log_disconnections = %d, log_replication_commands = %d",
+								Log_connections, Log_disconnections, log_replication_commands)));
 
 		/* Define pgaudit.confg_file */
 	DefineCustomStringVariable(
@@ -1780,6 +1792,28 @@ _PG_init(void)
 		PGC_POSTMASTER,
 		GUC_NOT_IN_SAMPLE,
 		NULL, NULL, NULL);
+
+	/*
+	 * log_connections, log_disconnections and log_replication_commands
+	 * are ensured to be set on here by the above checking, but it's
+	 * possible to turn these off by reloading configuration file.
+	 * To prevent it, we forcibly change these context to PGC_POSTMATER,
+	 * which is requred restarting to change value.
+	 */
+	guc_variables = get_guc_variables();
+	key = configKeys;
+	while (*key != NULL)
+	{
+		record = (struct config_generic **) bsearch((void *) &key,
+												 (void *) guc_variables,
+												 GetNumConfigOptions(),
+												 sizeof(struct config_generic *),
+												 guc_var_compare);
+
+		Assert(record);	/* must be found */
+		(*record)->context = PGC_POSTMASTER;
+		key++;
+	}
 
 	/*
 	 * Install our hook functions after saving the existing pointers to
@@ -1818,4 +1852,48 @@ _PG_init(void)
     ereport(LOG, (errmsg("pgaudit extension initialized")));
 
     inited = true;
+}
+
+/*
+ * comparator for bsearching guc_variables array.
+ * Note that this function is quoted from guc.c file.
+ */
+static int
+guc_var_compare(const void *a, const void *b)
+{
+	const struct config_generic *confa = *(struct config_generic * const *) a;
+	const struct config_generic *confb = *(struct config_generic * const *) b;
+
+	return guc_name_compare(confa->name, confb->name);
+}
+
+/*
+ * The bare comparision function for GUC names.
+ * Note that this function is quoted from guc.c file.
+ */
+static int
+guc_name_compare(const char *namea, const char *nameb)
+{
+	/*
+	 * The temptation to use strcasecmp() here must be resisted, because the
+	 * array ordering has to remain stable across setlocale() calls. So, build
+	 * our own with a simple ASCII-only downcasing.
+	 */
+	while (*namea && *nameb)
+	{
+		char cha = *namea++;
+		char chb = *nameb++;
+
+		if (cha >= 'A' && cha <= 'Z')
+			cha += 'a' - 'A';
+		if (chb >= 'A' && chb <= 'Z')
+			chb += 'a' - 'A';
+		if (cha != chb)
+			return cha - chb;
+	}
+	if (*namea)
+		return 1;	/* a is longer */
+	if (*nameb)
+		return -1;	/* b is longer */
+	return 0;
 }
