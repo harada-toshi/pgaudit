@@ -27,7 +27,6 @@
 
 space		[ \t\n\r\f\v]
 
-char		[a-zA-Z\%\,\"\'\(\)\*\_]
 val_string	\'([^'\\\n]|\\.|\'\')*\'
 int		[1-9][0-9]*
 boolean		off|on|true|false|0|1
@@ -56,7 +55,12 @@ field_rule      format|timestamp|database|audit_role|class|command_tag|object_ty
 "[option]"	return AUDIT_SECTION_OPTION;
 "[rule]"	return AUDIT_SECTION_RULE;
 {val_string}	return AUDIT_NAME;
-{char}+		return AUDIT_JUNK;
+.		{
+			ereport(ERROR,
+				(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					errmsg("error invalid token \"%s\" in \"%s\"",
+					yytext, get_auditsection_string(audit_parse_state))));
+		}
 %%
 
 /*
