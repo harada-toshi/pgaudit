@@ -17,6 +17,8 @@ all: pgaudit.o
 
 config.o: pgaudit_scan.c
 
+pgaudit_scan.c: FLEXFLAGS = -CF -p -i
+
 ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
