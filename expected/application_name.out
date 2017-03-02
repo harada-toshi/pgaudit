@@ -10,7 +10,7 @@ SELECT * FROM appname1;
 
 SET application_name TO 'appname1';
 SELECT * FROM appname1; -- must be logged
-NOTICE:  AUDIT: SESSION,1,1,READ,,regression,[local],appname1,,,,,SELECT,TABLE,public.appname1,SELECT * FROM appname1;,<not logged>
+NOTICE:  AUDIT: SESSION,1,1,READ,,regression,[local],appname1,,,,,SELECT,TABLE,public.appname1,SELECT * FROM appname1;,<none>
  col 
 -----
 (0 rows)

@@ -14,7 +14,7 @@ $$
 BEGIN
     RETURN 0;
 END;
-$$ LANGUAGE plpgsql;",<not logged>
+$$ LANGUAGE plpgsql;",<none>
 \c bar
 CREATE FUNCTION test_func() RETURNS INT AS
 $$
@@ -27,7 +27,7 @@ $$ LANGUAGE plpgsql;
 -- logged
 \c foo foo_user
 SELECT test_func();
-NOTICE:  AUDIT: SESSION,1,1,FUNCTION,,foo,[local],pg_regress,,,,,EXECUTE,FUNCTION,public.test_func,SELECT test_func();,<not logged>
+NOTICE:  AUDIT: SESSION,1,1,FUNCTION,,foo,[local],pg_regress,,,,,EXECUTE,FUNCTION,public.test_func,SELECT test_func();,<none>
  test_func 
 -----------
          0

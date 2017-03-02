@@ -18,6 +18,14 @@ DO $$ BEGIN EXECUTE 'select ' || '* FROM a1'; END$$;
 -- DROP table
 DROP TABLE a1;
 
+-- Test log parameter
+BEGIN;
+PREPARE prep_dx AS SELECT * FROM pg_extension WHERE extname = $1 AND extversion = $2;
+EXECUTE prep_dx ('plpgsql','1.0');
+EXECUTE prep_dx ('hogehoge','2.0');
+DEALLOCATE PREPARE prep_dx;
+COMMIT;
+
 \c baz
 -- DDL, logged
 CREATE TABLE a2 (c int primary key);
@@ -75,6 +83,7 @@ END;
 $emp_audit$ LANGUAGE plpgsql;
 CREATE TRIGGER trig_audit AFTER INSERT OR UPDATE OR DELETE ON trig_test
 FOR EACH ROW EXECUTE PROCEDURE process_trig_audit();
+
 
 -- Check if the following trigger operations are logged as well.
 -- INSERT, logged

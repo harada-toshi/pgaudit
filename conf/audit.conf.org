@@ -4,6 +4,7 @@ logger= 'serverlog'
 [option]
 log_level = 'NOTICE'
 log_for_test = on
+log_parameter = on
 
 [rule] # RULE 1, test for database and class
 database = 'foo'
