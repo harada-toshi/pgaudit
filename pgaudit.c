@@ -382,9 +382,9 @@ create_audit_log_string(StringInfo buf, ErrorData *edata,
 					bool typeIsVarLena;
 					char *paramStr;
 
-					/* Add a comma for each param */
+					/* Add a space for each param */
 					if (paramIdx != 0)
-						appendStringInfoChar(buf, separator);
+						append_valid_csv(&paramStrResult, " ");
 
 					/* Skip if null or if oid is invalid */
 					if (prm->isnull || !OidIsValid(prm->ptype))
