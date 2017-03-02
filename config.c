@@ -249,9 +249,9 @@ str_to_timestamp(const char *str)
 static bool
 op_to_bool(const char *str)
 {
-	if (strcmp(str, "=") == 0)
+	if (pg_strcasecmp(str, "=") == 0)
 		return true;
-	else if (strcmp(str, "!=") == 0)
+	else if (pg_strcasecmp(str, "!=") == 0)
 		return false;
 
 	return false;
@@ -261,13 +261,13 @@ op_to_bool(const char *str)
 static bool
 str_to_bool(const char *str)
 {
-	if (strcmp(str, "on") == 0 ||
-		strcmp(str, "true") == 0 ||
-		strcmp(str, "1") == 0)
+	if (pg_strcasecmp(str, "on") == 0 ||
+		pg_strcasecmp(str, "true") == 0 ||
+		pg_strcasecmp(str, "1") == 0)
 		return true;
-	else if (strcmp(str, "off") == 0 ||
-			 strcmp(str, "false") == 0 ||
-			 strcmp(str, "0") == 0)
+	else if (pg_strcasecmp(str, "off") == 0 ||
+			 pg_strcasecmp(str, "false") == 0 ||
+			 pg_strcasecmp(str, "0") == 0)
 		return false;
 
 	return false;
@@ -335,35 +335,35 @@ validate_settings(char *field, char *op,char *value,
 	/* Validation for output section */
 	if (audit_parse_state == AUDIT_SECTION_OUTPUT)
 	{
-		if ((strcmp(field, "logger") == 0))
+		if ((pg_strcasecmp(field, "logger") == 0))
 			outputConfig.logger = value;
-		else if ((strcmp(field, "level") == 0))
+		else if ((pg_strcasecmp(field, "level") == 0))
 			outputConfig.level = value;
-		else if ((strcmp(field, "pathlog") == 0))
+		else if ((pg_strcasecmp(field, "pathlog") == 0))
 			outputConfig.pathlog = value;
-		else if ((strcmp(field, "facility") == 0))
+		else if ((pg_strcasecmp(field, "facility") == 0))
 			outputConfig.facility = value;
-		else if ((strcmp(field, "priority") == 0))
+		else if ((pg_strcasecmp(field, "priority") == 0))
 			outputConfig.priority = value;
-		else if ((strcmp(field, "ident") == 0))
+		else if ((pg_strcasecmp(field, "ident") == 0))
 			outputConfig.ident = value;
-		else if ((strcmp(field, "option") == 0))
+		else if ((pg_strcasecmp(field, "option") == 0))
 			outputConfig.option = value;
 	}
 	/* Validation for option section */
 	else if (audit_parse_state == AUDIT_SECTION_OPTION)
 	{
-		if ((strcmp(field, "role") == 0))
+		if ((pg_strcasecmp(field, "role") == 0))
 			auditRole = value;
-		else if ((strcmp(field, "log_catalog") == 0))
+		else if ((pg_strcasecmp(field, "log_catalog") == 0))
 			auditLogCatalog = str_to_bool(value);
-		else if ((strcmp(field, "log_parameter") == 0))
+		else if ((pg_strcasecmp(field, "log_parameter") == 0))
 			auditLogParameter = str_to_bool(value);
-		else if ((strcmp(field, "log_statement_once") == 0))
+		else if ((pg_strcasecmp(field, "log_statement_once") == 0))
 			auditLogStatementOnce = str_to_bool(value);
-		else if ((strcmp(field, "log_for_test") == 0))
+		else if ((pg_strcasecmp(field, "log_for_test") == 0))
 			logForTest = str_to_bool(value);
-		else if ((strcmp(field, "log_level") == 0))
+		else if ((pg_strcasecmp(field, "log_level") == 0))
 		{
 			auditLogLevelString = value;
 			assign_pgaudit_log_level(auditLogLevelString);
@@ -374,7 +374,7 @@ validate_settings(char *field, char *op,char *value,
 	{
 		int i;
 
-		if ((strcmp(field, "format") == 0))
+		if ((pg_strcasecmp(field, "format") == 0))
 			rconf->format = value;
 		else
 		{
